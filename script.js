@@ -4179,6 +4179,76 @@
     showPronunciationFeedbackMessage(belajarFeedback, message);
   }
 
+  function showBelajarWordSebutFeedback(feedbackEl, lines) {
+    if (!feedbackEl) {
+      return;
+    }
+
+    const parts = Array.isArray(lines) ? lines : [lines];
+    const message = parts
+      .filter(function (line) {
+        return line != null && String(line).length > 0;
+      })
+      .join("\n");
+
+    feedbackEl.style.whiteSpace = "pre-line";
+    feedbackEl.style.textAlign = "center";
+    feedbackEl.style.lineHeight = "1.35";
+    showPronunciationFeedbackMessage(feedbackEl, message);
+  }
+
+  async function persistBelajarWordAssessmentSilently() {
+    const engine = window.KMJ_Assessment || window.KMJ_Pronunciation;
+
+    if (engine && engine.getLoggedInStudent && engine.getLoggedInStudent()) {
+      if (engine.tryAutoSyncAfterAssessment) {
+        try {
+          await engine.tryAutoSyncAfterAssessment();
+        } catch (syncError) {
+          console.warn("[KMJ] Belajar word silent sync skipped", syncError);
+        }
+      }
+    }
+
+    await refreshStudentSyncBadge();
+  }
+
+  function showBelajarWordSebutResultFeedback(feedbackEl, result, targetText) {
+    const heard = String(result.transcript || "").trim();
+
+    console.log("[KMJ Belajar Sebut] Google API", {
+      target: targetText,
+      checkpoint: selectedCheckpoint,
+      mode: result.mode,
+      heard: heard,
+      failReason: result.failReason || null,
+      googleDebug: result.googleDebug || null,
+    });
+
+    if (result.mode === "ai_verified") {
+      showBelajarWordSebutFeedback(feedbackEl, [
+        "Bagus! Sebutan betul ⭐",
+        "Google dengar: " + (heard || "(kosong)"),
+      ]);
+      return;
+    }
+
+    if (result.mode === "ai_failed") {
+      if (!heard) {
+        showBelajarWordSebutFeedback(feedbackEl, [
+          "Cuba lagi 😊",
+          "Google tidak dapat mendengar dengan jelas",
+        ]);
+        return;
+      }
+
+      showBelajarWordSebutFeedback(feedbackEl, [
+        "Cuba lagi 😊",
+        "Google dengar: " + heard,
+      ]);
+    }
+  }
+
   function isStudentBrowserOffline() {
     return typeof navigator !== "undefined" && navigator.onLine === false;
   }
@@ -6623,31 +6693,9 @@
 
     resetBelajarWordGoogleApiFailStreak();
 
-    if (result.mode === "ai_verified") {
-      void notifyStudentAssessmentSaved(
-        feedbackEl,
-        formatWordModeDetected(
-          result.transcript,
-          result.similarityPercent,
-          "AI Lulus"
-        )
-      );
-      return;
-    }
-
-    if (result.mode === "ai_failed") {
-      let failBase = "Rakaman disimpan.";
-
-      if (result.failReason === "unclear") {
-        failBase += " Sebutan kurang jelas — Cuba lagi.";
-      } else if (result.failReason === "malay_only") {
-        failBase +=
-          " Sila gunakan sebutan Bahasa Melayu sepenuhnya — Cuba lagi.";
-      } else {
-        failBase += " Cuba lagi 😊";
-      }
-
-      void notifyStudentAssessmentSaved(feedbackEl, failBase);
+    if (result.mode === "ai_verified" || result.mode === "ai_failed") {
+      showBelajarWordSebutResultFeedback(feedbackEl, result, targetText);
+      void persistBelajarWordAssessmentSilently();
     }
   }
 

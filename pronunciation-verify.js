@@ -3221,6 +3221,25 @@
     return false;
   }
 
+  function buildBelajarGoogleSpeechDebug(targetText, speech, evaluation) {
+    return {
+      targetText: targetText,
+      transcript: String(speech.transcript || "").trim(),
+      confidence: speech.confidence,
+      timedOut: !!speech.timedOut,
+      failed: !!speech.failed,
+      error: speech.error || null,
+      alternatives: (speech.alternatives || []).map(function (alt) {
+        return {
+          transcript: alt.transcript,
+          confidence: alt.confidence,
+        };
+      }),
+      pass: evaluation.pass,
+      failReason: evaluation.failReason || null,
+    };
+  }
+
   function isGoogleSpeechApiFailure(speech) {
     if (!speech) {
       return false;
@@ -3310,6 +3329,9 @@
     const evaluation = evaluateWordModeSpeech(targetText, speech);
     const transcript = evaluation.transcript || "";
     const status = evaluation.pass ? "ai_verified" : "ai_failed";
+    const googleDebug = buildBelajarGoogleSpeechDebug(targetText, speech, evaluation);
+
+    log("Belajar Google API result", googleDebug);
 
     const record = buildBaseRecord({
       id: latestExisting && latestExisting.id ? latestExisting.id : undefined,
@@ -3349,6 +3371,7 @@
         finalResult: evaluation.finalResult,
         recordId: record.id,
         record: record,
+        googleDebug: googleDebug,
       };
     }
 
@@ -3363,6 +3386,7 @@
       finalResult: evaluation.finalResult,
       recordId: record.id,
       record: record,
+      googleDebug: googleDebug,
     };
   }
 
