@@ -1,0 +1,1075 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  background: #111;
+  font-family: system-ui, sans-serif;
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.stage {
+  position: relative;
+  width: min(100vw, calc(100dvh * 9 / 16));
+  aspect-ratio: 9 / 16;
+  max-height: 100dvh;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+.screen {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+
+.screen.is-active {
+  display: block;
+}
+
+.screen-bg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.hotspot {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  z-index: 20;
+  pointer-events: auto;
+}
+
+.hotspot:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.65);
+  outline-offset: 2px;
+}
+
+#belajar-student-sync-badge {
+  position: absolute;
+  top: 3.2%;
+  right: 3.5%;
+  z-index: 12;
+  margin: 0;
+  padding: 0.28em 0.55em;
+  border-radius: 10px;
+  background: rgba(255, 252, 245, 0.88);
+  border: 1px solid rgba(92, 74, 50, 0.45);
+  pointer-events: none;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(0.62rem, 2.2vmin, 0.82rem);
+  font-weight: 700;
+  line-height: 1.15;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+#belajar-student-sync-badge.is-sync-pending {
+  color: #9a6b00;
+}
+
+#belajar-student-sync-badge.is-sync-done {
+  color: #1a6b3a;
+}
+
+body.debug-hotspots .hotspot {
+  background: rgba(255, 0, 0, 0.35);
+  border: 2px solid rgba(255, 0, 0, 0.9);
+  box-sizing: border-box;
+}
+
+/* Login: two HTML selects aligned to Canva white boxes on assets/login.png */
+#kmj-login-zone {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+}
+
+#kmj-login-zone .kmj-login-field {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  left: 13%;
+  width: 75%;
+  height: 6.2%;
+}
+
+#kmj-login-zone .kmj-login-field--class {
+  top: 30%;
+}
+
+#kmj-login-zone .kmj-login-field--name {
+  top: 45%;
+  height: 12.5%;
+  align-items: center;
+}
+
+#kmj-login-zone .kmj-login-field--name .kmj-login-select {
+  border-radius: 1.35em;
+  line-height: 1.35;
+  padding: 0.35em 0.75em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+#kmj-login-zone .kmj-login-field--name .kmj-login-select option {
+  white-space: normal;
+  word-wrap: break-word;
+}
+
+#kmj-login-zone .kmj-login-select {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0 0.65em;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: #2a1f14;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(0.95rem, 3.4vmin, 1.2rem);
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-align-last: center;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+#kmj-login-zone .kmj-login-select:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+#kmj-login-zone .kmj-login-select:focus-visible {
+  outline: 2px solid rgba(92, 74, 50, 0.55);
+  outline-offset: 1px;
+}
+
+#kmj-teacher-dashboard {
+  max-height: 80vh;
+}
+
+#kmj-teacher-dashboard-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+#tulis-demo-zone {
+  position: absolute;
+  left: 12%;
+  top: 24.8%;
+  width: 76%;
+  height: 14%;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+}
+
+#tulis-demo-text {
+  max-width: 100%;
+  color: #2a1f14;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(2.5rem, 10.5vmin, 4.8rem);
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-shadow: 0 2px 3px rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+
+#screen-tulis {
+  isolation: isolate;
+}
+
+#tulis-canvas-zone {
+  position: absolute;
+  left: 11.5%;
+  top: 51.2%;
+  right: 11.5%;
+  bottom: 26.5%;
+  width: auto;
+  height: auto;
+  z-index: 5;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+#tulis-writing-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: transparent;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+#screen-tulis [data-hotspot="tulis_kembali"],
+#screen-tulis [data-hotspot="tulis_padam"],
+#screen-tulis [data-hotspot="tulis_seterusnya"] {
+  z-index: 80;
+  touch-action: manipulation;
+}
+
+#screen-tulis.debug-tulis-hotspots [data-hotspot="tulis_kembali"],
+#screen-tulis.debug-tulis-hotspots [data-hotspot="tulis_padam"],
+#screen-tulis.debug-tulis-hotspots [data-hotspot="tulis_seterusnya"] {
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+}
+
+#screen-tulis.debug-tulis-hotspots [data-hotspot="tulis_kembali"] {
+  background: rgba(30, 120, 255, 0.45);
+  border-color: rgba(0, 70, 200, 0.95);
+}
+
+#screen-tulis.debug-tulis-hotspots [data-hotspot="tulis_padam"] {
+  background: rgba(255, 150, 30, 0.45);
+  border-color: rgba(200, 90, 0, 0.95);
+}
+
+#screen-tulis.debug-tulis-hotspots [data-hotspot="tulis_seterusnya"] {
+  background: rgba(60, 190, 70, 0.45);
+  border-color: rgba(0, 140, 40, 0.95);
+}
+
+#screen-tulis.debug-tulis-hotspots [data-hotspot="tulis_kembali"]::after,
+#screen-tulis.debug-tulis-hotspots [data-hotspot="tulis_padam"]::after,
+#screen-tulis.debug-tulis-hotspots [data-hotspot="tulis_seterusnya"]::after {
+  content: attr(data-debug-label);
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  max-width: calc(100% - 4px);
+  padding: 1px 3px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: left;
+  pointer-events: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#screen-latihan {
+  isolation: isolate;
+}
+
+#latihan-choice-zone {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+#latihan-choice-info {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2em 0.45em;
+  pointer-events: none;
+  text-align: center;
+}
+
+#latihan-choice-label {
+  display: none;
+}
+
+#latihan-choice-progress-track {
+  width: 100%;
+  height: 0.72em;
+  border-radius: 999px;
+  border: 2px solid rgba(43, 89, 128, 0.8);
+  background: rgba(255, 255, 255, 0.5);
+  overflow: hidden;
+}
+
+#latihan-choice-progress-fill {
+  width: 10%;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #39b8ff 0%, #6ce36d 100%);
+  transition: width 0.35s ease;
+}
+
+#latihan-choice-progress {
+  margin: 0;
+  padding-top: 0.05em;
+  width: 100%;
+  color: #1a4a6e;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(0.85rem, 3.2vmin, 1.1rem);
+  font-weight: 700;
+  line-height: 1.15;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.65);
+}
+
+#latihan-choice-content {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.5em;
+  pointer-events: none;
+}
+
+#latihan-choice-question {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  text-align: center;
+  color: #2a1f14;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(1rem, 4vmin, 1.5rem);
+  font-weight: 700;
+  line-height: 1.2;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.45);
+}
+
+#latihan-choice-answers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.latihan-choice-answer {
+  position: absolute;
+  margin: 0;
+  padding-left: 0.35em;
+  padding-right: 0.35em;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 8;
+  touch-action: manipulation;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+  padding-top: 2.25em;
+  padding-bottom: 0.35em;
+  color: #2a1f14;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(1.25rem, 5.5vmin, 2.6rem);
+  font-weight: 700;
+  line-height: 1.05;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.4);
+  -webkit-tap-highlight-color: transparent;
+  border-radius: 10px;
+  transition: transform 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+  transform: scale(1);
+}
+
+.latihan-choice-answer:hover,
+.latihan-choice-answer:focus-visible {
+  transform: scale(1.05);
+}
+
+.latihan-choice-answer:active,
+.latihan-choice-answer.is-tapped {
+  transform: scale(1.08);
+}
+
+.latihan-choice-answer.is-correct {
+  background: rgba(72, 180, 78, 0.48);
+  box-shadow: 0 0 0 3px rgba(40, 130, 48, 0.5);
+}
+
+.latihan-choice-answer.is-correct.is-pop {
+  animation: latihan-correct-pop 0.55s ease;
+}
+
+.latihan-choice-answer.is-correct::after {
+  content: "⭐";
+  position: absolute;
+  top: 4%;
+  right: 6%;
+  font-size: clamp(1rem, 4vmin, 1.6rem);
+  line-height: 1;
+  pointer-events: none;
+  animation: latihan-star-pop 0.55s ease;
+}
+
+.latihan-choice-answer.is-wrong {
+  background: rgba(220, 72, 62, 0.38);
+  box-shadow: 0 0 0 3px rgba(170, 40, 32, 0.4);
+}
+
+.latihan-choice-answer.is-shake {
+  animation: latihan-shake 0.45s ease;
+}
+
+@keyframes latihan-star-pop {
+  0% {
+    transform: scale(0.2) rotate(-20deg);
+    opacity: 0;
+  }
+
+  60% {
+    transform: scale(1.25) rotate(8deg);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes latihan-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
+}
+
+#latihan-choice-reinforcement {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0.2em 0.4em;
+  pointer-events: none;
+  z-index: 11;
+  opacity: 0;
+  text-align: center;
+  transition: opacity 0.2s ease;
+}
+
+#latihan-choice-reinforcement.is-visible,
+#screen-latihan.latihan-calibration-mode #latihan-choice-reinforcement.is-calibration-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#screen-latihan.latihan-easy-adjust-mode #latihan-choice-reinforcement.is-calibration-active,
+#screen-latihan.latihan-calibration-mode #latihan-choice-reinforcement.is-calibration-active {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  z-index: 9999 !important;
+}
+
+#latihan-reinforcement-word {
+  margin: 0;
+  width: 100%;
+  color: #2a1f14;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(1.35rem, 5.5vmin, 2.4rem);
+  font-weight: 700;
+  line-height: 1.1;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.45);
+}
+
+#latihan-reinforcement-breakdown {
+  margin: 0.1em 0 0;
+  width: 100%;
+  color: #1a4a6e;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(1rem, 4.2vmin, 1.65rem);
+  font-weight: 700;
+  line-height: 1.15;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.45);
+}
+
+#screen-latihan #latihan-feedback {
+  z-index: 12;
+  padding: 0.35em 0.5em;
+  border-radius: 16px;
+  font-size: clamp(1rem, 4.2vmin, 1.65rem);
+  line-height: 1.15;
+  box-shadow: 0 3px 10px rgba(42, 31, 20, 0.18);
+  white-space: normal;
+  overflow: hidden;
+}
+
+#latihan-completion-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 120;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1.25em;
+  background: rgba(255, 252, 245, 0.92);
+  pointer-events: auto;
+}
+
+#latihan-completion-title {
+  margin: 0;
+  color: #2a1f14;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(1.2rem, 5vmin, 2rem);
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.2;
+}
+
+#latihan-completion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75em;
+  width: 100%;
+  max-width: 24em;
+}
+
+.latihan-completion-btn {
+  flex: 1 1 9em;
+  margin: 0;
+  padding: 0.65em 1em;
+  border: 2px solid #5c4a32;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fff8e8 0%, #ffe7b8 100%);
+  color: #2a1f14;
+  cursor: pointer;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(0.95rem, 3.8vmin, 1.2rem);
+  font-weight: 700;
+  touch-action: manipulation;
+}
+
+.latihan-completion-btn:active {
+  transform: scale(0.98);
+}
+
+#screen-latihan [data-hotspot="latihan_seterusnya"].is-latihan-next-glow {
+  animation: latihan-seterusnya-glow 1.1s ease 2;
+}
+
+@keyframes latihan-seterusnya-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 214, 64, 0);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 214, 64, 0.95);
+  }
+}
+
+@keyframes latihan-correct-pop {
+  0% {
+    transform: scale(1);
+  }
+
+  45% {
+    transform: scale(1.1);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+#screen-latihan [data-hotspot="latihan_kembali"],
+#screen-latihan [data-hotspot="latihan_ulang"],
+#screen-latihan [data-hotspot="latihan_seterusnya"] {
+  z-index: 100;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+#screen-latihan.latihan-easy-adjust-mode [data-hotspot="latihan_kembali"],
+#screen-latihan.latihan-easy-adjust-mode [data-hotspot="latihan_ulang"],
+#screen-latihan.latihan-easy-adjust-mode [data-hotspot="latihan_seterusnya"],
+#screen-latihan.latihan-easy-adjust-mode #latihan-choice-info,
+#screen-latihan.latihan-easy-adjust-mode #latihan-choice-content,
+#screen-latihan.latihan-easy-adjust-mode #latihan-choice-reinforcement,
+#screen-latihan.latihan-easy-adjust-mode #latihan-feedback,
+#screen-latihan.latihan-easy-adjust-mode .latihan-choice-answer,
+#screen-latihan.latihan-calibration-mode [data-hotspot="latihan_kembali"],
+#screen-latihan.latihan-calibration-mode [data-hotspot="latihan_ulang"],
+#screen-latihan.latihan-calibration-mode [data-hotspot="latihan_seterusnya"],
+#screen-latihan.latihan-calibration-mode #latihan-choice-info,
+#screen-latihan.latihan-calibration-mode #latihan-choice-content,
+#screen-latihan.latihan-calibration-mode #latihan-choice-reinforcement,
+#screen-latihan.latihan-calibration-mode #latihan-feedback,
+#screen-latihan.latihan-calibration-mode .latihan-choice-answer {
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 0, 0, 0.95);
+  background: rgba(255, 0, 0, 0.28);
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  z-index: 9999 !important;
+}
+
+#screen-latihan.latihan-easy-adjust-mode .latihan-cal-target,
+#screen-latihan.latihan-calibration-mode .latihan-cal-target {
+  cursor: move;
+  touch-action: none;
+}
+
+#screen-latihan.latihan-easy-adjust-mode .latihan-cal-resize-handle,
+#screen-latihan.latihan-calibration-mode .latihan-cal-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px solid rgba(200, 0, 0, 0.95);
+  border-radius: 2px;
+  z-index: 10000;
+  pointer-events: auto;
+}
+
+#latihan-layout-copy-btn {
+  position: absolute;
+  left: 2%;
+  top: 2%;
+  z-index: 10001;
+  margin: 0;
+  padding: 0.45em 0.7em;
+  border: 2px solid #5c4a32;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #2a1f14;
+  cursor: pointer;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+#screen-latihan.latihan-easy-adjust-mode [data-hotspot="latihan_kembali"]::after,
+#screen-latihan.latihan-easy-adjust-mode [data-hotspot="latihan_ulang"]::after,
+#screen-latihan.latihan-easy-adjust-mode [data-hotspot="latihan_seterusnya"]::after,
+#screen-latihan.latihan-easy-adjust-mode #latihan-choice-info::after,
+#screen-latihan.latihan-easy-adjust-mode #latihan-choice-content::after,
+#screen-latihan.latihan-easy-adjust-mode #latihan-choice-reinforcement::after,
+#screen-latihan.latihan-easy-adjust-mode #latihan-feedback::after,
+#screen-latihan.latihan-easy-adjust-mode .latihan-choice-answer::after,
+#screen-latihan.latihan-calibration-mode [data-hotspot="latihan_kembali"]::after,
+#screen-latihan.latihan-calibration-mode [data-hotspot="latihan_ulang"]::after,
+#screen-latihan.latihan-calibration-mode [data-hotspot="latihan_seterusnya"]::after,
+#screen-latihan.latihan-calibration-mode #latihan-choice-info::after,
+#screen-latihan.latihan-calibration-mode #latihan-choice-content::after,
+#screen-latihan.latihan-calibration-mode #latihan-choice-reinforcement::after,
+#screen-latihan.latihan-calibration-mode #latihan-feedback::after,
+#screen-latihan.latihan-calibration-mode .latihan-choice-answer::after {
+  content: attr(data-debug-label);
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  max-width: calc(100% - 4px);
+  padding: 1px 3px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: left;
+  pointer-events: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.debug-hotspots .hotspot::after {
+  content: attr(data-debug-label);
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  max-width: calc(100% - 4px);
+  padding: 1px 3px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: left;
+  pointer-events: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#screen-latihan_susun {
+  isolation: isolate;
+}
+
+#latihan-susun-zone {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+#latihan-susun-progress {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.04em;
+  overflow: hidden;
+  padding: 0 0.15em;
+  pointer-events: none;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(0.42rem, min(2.2vw, 2.9vh), 0.9rem);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.latihan-susun-star {
+  display: inline-block;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.latihan-susun-star.is-filled {
+  color: #ffc800;
+  text-shadow: 0 0 4px rgba(255, 210, 40, 0.55), 0 1px 1px rgba(120, 80, 0, 0.25);
+}
+
+.latihan-susun-star.is-empty {
+  color: #e8d070;
+  opacity: 0.72;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.45);
+}
+
+#latihan-susun-reinforcement {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0.2em 0.4em;
+  pointer-events: none;
+  z-index: 11;
+  opacity: 0;
+  text-align: center;
+  transition: opacity 0.2s ease;
+}
+
+#latihan-susun-reinforcement.is-visible,
+#screen-latihan_susun.latihan-susun-adjust-mode #latihan-susun-reinforcement.is-calibration-active {
+  opacity: 1;
+}
+
+#latihan-susun-reinforcement-text {
+  margin: 0;
+  width: 100%;
+  color: #2a1f14;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(1.1rem, 4.5vmin, 1.9rem);
+  font-weight: 700;
+  line-height: 1.15;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.45);
+}
+
+#latihan-susun-answer,
+#latihan-susun-drag {
+  position: absolute;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45em 0.55em;
+  box-sizing: border-box;
+  padding: 0.25em 0.35em;
+  pointer-events: auto;
+}
+
+.latihan-susun-slot {
+  min-width: 3.2em;
+  min-height: 2.4em;
+  padding: 0.2em 0.45em;
+  border: 2px dashed rgba(43, 89, 128, 0.55);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.latihan-susun-chip {
+  margin: 0;
+  padding: 0.35em 0.65em;
+  border: 2px solid #5c4a32;
+  border-radius: 12px;
+  background: rgba(255, 248, 232, 0.95);
+  color: #2a1f14;
+  cursor: grab;
+  touch-action: none;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(1.1rem, 4.8vmin, 2rem);
+  font-weight: 700;
+  line-height: 1.1;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.45);
+}
+
+.latihan-susun-chip:not(.is-dragging):not(.is-in-slot) {
+  animation: latihan-susun-chip-float 2.8s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes latihan-susun-chip-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-3px) scale(1.03);
+  }
+}
+
+.latihan-susun-chip.is-dragging {
+  cursor: grabbing;
+  animation: none;
+  box-shadow: 0 4px 12px rgba(42, 31, 20, 0.25);
+}
+
+.latihan-susun-chip.is-in-slot {
+  cursor: grab;
+}
+
+#screen-latihan_susun #latihan-susun-feedback {
+  z-index: 12;
+  padding: 0.35em 0.5em;
+  border-radius: 16px;
+  font-size: clamp(1rem, 4.2vmin, 1.65rem);
+  line-height: 1.15;
+  box-shadow: 0 3px 10px rgba(42, 31, 20, 0.18);
+  overflow: hidden;
+}
+
+#latihan-susun-completion-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 120;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1.25em;
+  background: rgba(255, 252, 245, 0.92);
+  pointer-events: auto;
+}
+
+#latihan-susun-completion-overlay p {
+  margin: 0;
+  color: #2a1f14;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(1.2rem, 5vmin, 2rem);
+  font-weight: 700;
+  text-align: center;
+}
+
+.latihan-susun-completion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75em;
+  width: 100%;
+  max-width: 24em;
+}
+
+.latihan-susun-completion-btn {
+  flex: 1 1 9em;
+  margin: 0;
+  padding: 0.65em 1em;
+  border: 2px solid #5c4a32;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fff8e8 0%, #ffe7b8 100%);
+  color: #2a1f14;
+  cursor: pointer;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(0.95rem, 3.8vmin, 1.2rem);
+  font-weight: 700;
+  touch-action: manipulation;
+}
+
+#screen-latihan_susun [data-hotspot="latihan_susun_kembali"],
+#screen-latihan_susun [data-hotspot="latihan_susun_ulang"],
+#screen-latihan_susun [data-hotspot="latihan_susun_seterusnya"] {
+  z-index: 100;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+#screen-latihan_susun [data-hotspot="latihan_susun_seterusnya"].is-latihan-susun-next-glow {
+  animation: latihan-seterusnya-glow 1.1s ease 2;
+}
+
+#latihan-susun-layout-copy-btn {
+  position: absolute;
+  left: 2%;
+  top: 2%;
+  z-index: 10001;
+  margin: 0;
+  padding: 0.45em 0.7em;
+  border: 2px solid #5c4a32;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #2a1f14;
+  cursor: pointer;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+#screen-latihan_susun.latihan-susun-adjust-mode [data-hotspot="latihan_susun_kembali"],
+#screen-latihan_susun.latihan-susun-adjust-mode [data-hotspot="latihan_susun_ulang"],
+#screen-latihan_susun.latihan-susun-adjust-mode [data-hotspot="latihan_susun_seterusnya"],
+#screen-latihan_susun.latihan-susun-adjust-mode #latihan-susun-progress,
+#screen-latihan_susun.latihan-susun-adjust-mode #latihan-susun-answer,
+#screen-latihan_susun.latihan-susun-adjust-mode #latihan-susun-drag,
+#screen-latihan_susun.latihan-susun-adjust-mode #latihan-susun-feedback,
+#screen-latihan_susun.latihan-susun-adjust-mode #latihan-susun-reinforcement {
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 0, 0, 0.95);
+  background: rgba(255, 0, 0, 0.28);
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  z-index: 9999 !important;
+}
+
+#screen-latihan_susun.latihan-susun-adjust-mode .latihan-susun-cal-target {
+  cursor: move;
+  touch-action: none;
+}
+
+#screen-latihan_susun.latihan-susun-adjust-mode [data-hotspot="latihan_susun_kembali"]::after,
+#screen-latihan_susun.latihan-susun-adjust-mode [data-hotspot="latihan_susun_ulang"]::after,
+#screen-latihan_susun.latihan-susun-adjust-mode [data-hotspot="latihan_susun_seterusnya"]::after,
+#screen-latihan_susun.latihan-susun-adjust-mode #latihan-susun-progress::after,
+#screen-latihan_susun.latihan-susun-adjust-mode #latihan-susun-answer::after,
+#screen-latihan_susun.latihan-susun-adjust-mode #latihan-susun-drag::after,
+#screen-latihan_susun.latihan-susun-adjust-mode #latihan-susun-feedback::after,
+#screen-latihan_susun.latihan-susun-adjust-mode #latihan-susun-reinforcement::after {
+  content: attr(data-debug-label);
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  max-width: calc(100% - 4px);
+  padding: 1px 3px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: left;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#belajar-sebut-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 120;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1.25em;
+  background: rgba(255, 252, 245, 0.92);
+  pointer-events: auto;
+}
+
+#belajar-sebut-overlay.is-visible {
+  display: flex;
+}
+
+#belajar-sebut-overlay-message {
+  margin: 0;
+  color: #2a1f14;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-size: clamp(1.2rem, 5vmin, 2rem);
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.3;
+}
+
+#belajar-sebut-overlay-mic {
+  display: none;
+  font-size: clamp(3rem, 12vmin, 5rem);
+  line-height: 1;
+}
+
+#belajar-sebut-overlay-mic.is-visible {
+  display: block;
+  animation: belajar-sebut-mic-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes belajar-sebut-mic-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}

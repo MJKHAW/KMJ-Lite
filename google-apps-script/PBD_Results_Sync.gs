@@ -1,0 +1,725 @@
+/**
+ * KMJ-Lite — Google Sheet sync + license validation
+ *
+ * Sheets:
+ * - PBD_Results (assessment sync, latest-only upsert)
+ * - Licenses (commercial activation)
+ *
+ * PBD_Results unique key (latest attempt per student/question):
+ *   schoolCode + classId + studentId + checkpointId + targetText
+ *
+ * Setup:
+ * 1. Create a Google Sheet with tabs PBD_Results and Licenses.
+ * 2. Extensions → Apps Script → paste this file.
+ * 3. Deploy → New deployment → Web app
+ *    - Execute as: Me
+ *    - Who has access: Anyone
+ * 4. Copy the Web App URL into pronunciation-verify.js:
+ *    const KMJ_SYNC_ENDPOINT = "YOUR_URL_HERE";
+ */
+
+var PBD_RESULTS_SHEET_NAME = "PBD_Results";
+var LICENSES_SHEET_NAME = "Licenses";
+var STUDENT_ROSTER_SHEET_NAME = "Student_Roster";
+
+var LICENSE_HEADERS = [
+  "SchoolCode",
+  "SchoolName",
+  "AdminEmail",
+  "LicenseKey",
+  "MaxStudents",
+  "Status",
+  "ExpiryDate",
+  "LastActivatedAt",
+];
+
+var PBD_RESULTS_HEADERS = [
+  "recordId",
+  "schoolCode",
+  "classId",
+  "studentId",
+  "studentName",
+  "checkpointId",
+  "category",
+  "targetText",
+  "transcript",
+  "confidence",
+  "aiResult",
+  "aiScore",
+  "teacherTP",
+  "finalResult",
+  "resultSource",
+  "timestamp",
+  "syncedAt",
+];
+
+var STUDENT_ROSTER_HEADERS = [
+  "SchoolCode",
+  "ClassId",
+  "StudentName",
+  "StudentId",
+  "CreatedAt",
+  "UpdatedAt",
+];
+
+function doPost(e) {
+  try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return jsonResponse_({
+        success: false,
+        error: "Tiada data POST diterima.",
+      });
+    }
+
+    var body = JSON.parse(e.postData.contents);
+
+    if (body.action === "validateLicense") {
+      return validateLicense_(body);
+    }
+
+    if (body.action === "uploadRoster") {
+      return uploadRoster_(body);
+    }
+
+    if (body.action === "getRoster") {
+      return getRoster_(body);
+    }
+
+    var records = body.records;
+
+    if (!records || !records.length) {
+      return jsonResponse_({ success: true, inserted: 0, updated: 0 });
+    }
+
+    var sheet = getOrCreateSheet_(PBD_RESULTS_SHEET_NAME);
+    ensureHeaders_(sheet, PBD_RESULTS_HEADERS);
+
+    var syncedAt = new Date().toISOString();
+    var keyIndex = buildLatestKeyRowMap_(sheet);
+    var inserted = 0;
+    var updated = 0;
+    var i;
+    var row;
+    var latestKey;
+    var rowValues;
+    var targetRow;
+
+    for (i = 0; i < records.length; i += 1) {
+      row = records[i] || {};
+      latestKey = buildLatestSyncKeyFromPayload_(row);
+
+      if (!latestKey) {
+        continue;
+      }
+
+      rowValues = rowValuesFromRecord_(row, syncedAt);
+      targetRow = keyIndex[latestKey];
+
+      if (targetRow) {
+        sheet
+          .getRange(targetRow, 1, 1, PBD_RESULTS_HEADERS.length)
+          .setValues([rowValues]);
+        removeDuplicateKeyRows_(sheet, latestKey, targetRow);
+        updated += 1;
+      } else {
+        sheet.appendRow(rowValues);
+        keyIndex[latestKey] = sheet.getLastRow();
+        inserted += 1;
+      }
+    }
+
+    return jsonResponse_({ success: true, inserted: inserted, updated: updated });
+  } catch (err) {
+    return jsonResponse_({
+      success: false,
+      error: err && err.message ? err.message : String(err),
+    });
+  }
+}
+
+function doGet() {
+  return jsonResponse_({
+    success: true,
+    message:
+      "KMJ-Lite endpoint is ready (PBD_Results latest-key sync + validateLicense + roster sync).",
+  });
+}
+
+function normalizeRosterKeyPart_(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function buildRosterKey_(schoolCode, classId, studentName) {
+  var a = normalizeRosterKeyPart_(schoolCode);
+  var b = normalizeRosterKeyPart_(classId);
+  var c = normalizeRosterKeyPart_(studentName);
+
+  if (!a || !b || !c) {
+    return "";
+  }
+
+  return a + "|" + b + "|" + c;
+}
+
+function normalizeRosterStudentId_(classId, studentName) {
+  return (
+    String(classId || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "") +
+    "__" +
+    String(studentName || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+  );
+}
+
+function sanitizeRosterItem_(item) {
+  var classId = String((item && item.classId) || "").trim();
+  var studentName = String((item && item.studentName) || "").trim();
+  var studentId = String((item && item.studentId) || "").trim();
+  var createdAt = String((item && item.createdAt) || "").trim();
+
+  if (!classId || !studentName) {
+    return null;
+  }
+
+  if (!studentId) {
+    studentId = normalizeRosterStudentId_(classId, studentName);
+  }
+
+  if (!createdAt) {
+    createdAt = new Date().toISOString();
+  }
+
+  return {
+    classId: classId,
+    studentName: studentName,
+    studentId: studentId,
+    createdAt: createdAt,
+  };
+}
+
+function uploadRoster_(body) {
+  var schoolCode = String(body.schoolCode || "")
+    .trim()
+    .toUpperCase();
+  var roster = Array.isArray(body.roster) ? body.roster : [];
+  var nowIso = new Date().toISOString();
+  var inserted = 0;
+  var updated = 0;
+  var i;
+  var item;
+  var key;
+  var targetRow;
+
+  if (!schoolCode) {
+    return jsonResponse_({ success: false, error: "schoolCode diperlukan." });
+  }
+
+  var sheet = getOrCreateSheet_(STUDENT_ROSTER_SHEET_NAME);
+  ensureHeaders_(sheet, STUDENT_ROSTER_HEADERS);
+  var rowMap = buildRosterRowMap_(sheet);
+
+  for (i = 0; i < roster.length; i += 1) {
+    item = sanitizeRosterItem_(roster[i]);
+
+    if (!item) {
+      continue;
+    }
+
+    key = buildRosterKey_(schoolCode, item.classId, item.studentName);
+
+    if (!key) {
+      continue;
+    }
+
+    targetRow = rowMap[key];
+
+    if (targetRow) {
+      sheet
+        .getRange(targetRow, 1, 1, STUDENT_ROSTER_HEADERS.length)
+        .setValues([
+          [
+            schoolCode,
+            item.classId,
+            item.studentName,
+            item.studentId,
+            sheet.getRange(targetRow, 5).getValue() || item.createdAt,
+            nowIso,
+          ],
+        ]);
+      removeDuplicateRosterRows_(sheet, key, targetRow);
+      updated += 1;
+    } else {
+      sheet.appendRow([
+        schoolCode,
+        item.classId,
+        item.studentName,
+        item.studentId,
+        item.createdAt,
+        nowIso,
+      ]);
+      rowMap[key] = sheet.getLastRow();
+      inserted += 1;
+    }
+  }
+
+  return getRosterBySchool_(schoolCode, inserted, updated);
+}
+
+function getRoster_(body) {
+  var schoolCode = String(body.schoolCode || "")
+    .trim()
+    .toUpperCase();
+
+  if (!schoolCode) {
+    return jsonResponse_({ success: false, error: "schoolCode diperlukan." });
+  }
+
+  return getRosterBySchool_(schoolCode, 0, 0);
+}
+
+function getRosterBySchool_(schoolCode, inserted, updated) {
+  var sheet = getOrCreateSheet_(STUDENT_ROSTER_SHEET_NAME);
+  ensureHeaders_(sheet, STUDENT_ROSTER_HEADERS);
+  var lastRow = sheet.getLastRow();
+  var values;
+  var i;
+  var row;
+  var roster = [];
+
+  if (lastRow < 2) {
+    return jsonResponse_({
+      success: true,
+      inserted: inserted || 0,
+      updated: updated || 0,
+      roster: [],
+    });
+  }
+
+  values = sheet.getRange(2, 1, lastRow - 1, STUDENT_ROSTER_HEADERS.length).getValues();
+
+  for (i = 0; i < values.length; i += 1) {
+    row = values[i];
+
+    if (String(row[0] || "").trim().toUpperCase() !== schoolCode) {
+      continue;
+    }
+
+    roster.push({
+      schoolCode: String(row[0] || "").trim(),
+      classId: String(row[1] || "").trim(),
+      studentName: String(row[2] || "").trim(),
+      studentId: String(row[3] || "").trim(),
+      createdAt: String(row[4] || "").trim(),
+      updatedAt: String(row[5] || "").trim(),
+    });
+  }
+
+  return jsonResponse_({
+    success: true,
+    inserted: inserted || 0,
+    updated: updated || 0,
+    roster: roster,
+  });
+}
+
+function buildRosterRowMap_(sheet) {
+  var map = {};
+  var lastRow = sheet.getLastRow();
+  var values;
+  var i;
+  var rowValues;
+  var key;
+
+  if (lastRow < 2) {
+    return map;
+  }
+
+  values = sheet.getRange(2, 1, lastRow - 1, STUDENT_ROSTER_HEADERS.length).getValues();
+
+  for (i = 0; i < values.length; i += 1) {
+    rowValues = values[i];
+    key = buildRosterKey_(rowValues[0], rowValues[1], rowValues[2]);
+
+    if (key) {
+      map[key] = i + 2;
+    }
+  }
+
+  return map;
+}
+
+function removeDuplicateRosterRows_(sheet, key, keepRow) {
+  var lastRow = sheet.getLastRow();
+  var values;
+  var i;
+  var rowNumber;
+  var rowsToDelete = [];
+
+  if (lastRow < 2 || !key || !keepRow) {
+    return;
+  }
+
+  values = sheet.getRange(2, 1, lastRow - 1, STUDENT_ROSTER_HEADERS.length).getValues();
+
+  for (i = 0; i < values.length; i += 1) {
+    rowNumber = i + 2;
+
+    if (rowNumber === keepRow) {
+      continue;
+    }
+
+    if (buildRosterKey_(values[i][0], values[i][1], values[i][2]) === key) {
+      rowsToDelete.push(rowNumber);
+    }
+  }
+
+  rowsToDelete.sort(function (a, b) {
+    return b - a;
+  });
+
+  for (i = 0; i < rowsToDelete.length; i += 1) {
+    sheet.deleteRow(rowsToDelete[i]);
+  }
+}
+
+function normalizeKeyPart_(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function buildLatestSyncKey_(schoolCode, classId, studentId, checkpointId, targetText) {
+  var parts = [
+    normalizeKeyPart_(schoolCode),
+    normalizeKeyPart_(classId),
+    normalizeKeyPart_(studentId),
+    normalizeKeyPart_(checkpointId),
+    normalizeKeyPart_(targetText),
+  ];
+  var i;
+
+  for (i = 0; i < parts.length; i += 1) {
+    if (!parts[i]) {
+      return "";
+    }
+  }
+
+  return parts.join("|");
+}
+
+function buildLatestSyncKeyFromPayload_(row) {
+  return buildLatestSyncKey_(
+    row.schoolCode,
+    row.classId,
+    row.studentId,
+    row.checkpointId,
+    row.targetText
+  );
+}
+
+function buildLatestSyncKeyFromSheetRow_(rowValues) {
+  if (!rowValues || !rowValues.length) {
+    return "";
+  }
+
+  return buildLatestSyncKey_(
+    rowValues[1],
+    rowValues[2],
+    rowValues[3],
+    rowValues[5],
+    rowValues[7]
+  );
+}
+
+function rowTimestampMs_(rowValues) {
+  var ts = String((rowValues && rowValues[15]) || "").trim();
+  var syncedAt = String((rowValues && rowValues[16]) || "").trim();
+  var parsed = Date.parse(ts || syncedAt);
+
+  if (isNaN(parsed)) {
+    return 0;
+  }
+
+  return parsed;
+}
+
+function buildLatestKeyRowMap_(sheet) {
+  var map = {};
+  var lastRow = sheet.getLastRow();
+  var values;
+  var i;
+  var rowValues;
+  var latestKey;
+  var sheetRow;
+  var existingRow;
+  var existingValues;
+
+  if (lastRow < 2) {
+    return map;
+  }
+
+  values = sheet.getRange(2, 1, lastRow, PBD_RESULTS_HEADERS.length).getValues();
+
+  for (i = 0; i < values.length; i += 1) {
+    rowValues = values[i];
+    latestKey = buildLatestSyncKeyFromSheetRow_(rowValues);
+
+    if (!latestKey) {
+      continue;
+    }
+
+    sheetRow = i + 2;
+    existingRow = map[latestKey];
+
+    if (!existingRow) {
+      map[latestKey] = sheetRow;
+      continue;
+    }
+
+    existingValues = values[existingRow - 2];
+
+    if (rowTimestampMs_(rowValues) >= rowTimestampMs_(existingValues)) {
+      map[latestKey] = sheetRow;
+    }
+  }
+
+  return map;
+}
+
+function removeDuplicateKeyRows_(sheet, latestKey, keepRow) {
+  var lastRow = sheet.getLastRow();
+  var values;
+  var i;
+  var sheetRow;
+  var rowsToDelete = [];
+
+  if (lastRow < 2 || !latestKey || !keepRow) {
+    return;
+  }
+
+  values = sheet.getRange(2, 1, lastRow, PBD_RESULTS_HEADERS.length).getValues();
+
+  for (i = 0; i < values.length; i += 1) {
+    sheetRow = i + 2;
+
+    if (sheetRow === keepRow) {
+      continue;
+    }
+
+    if (buildLatestSyncKeyFromSheetRow_(values[i]) === latestKey) {
+      rowsToDelete.push(sheetRow);
+    }
+  }
+
+  rowsToDelete.sort(function (a, b) {
+    return b - a;
+  });
+
+  for (i = 0; i < rowsToDelete.length; i += 1) {
+    sheet.deleteRow(rowsToDelete[i]);
+  }
+}
+
+function validateLicense_(body) {
+  var schoolCode = String(body.schoolCode || "")
+    .trim()
+    .toUpperCase();
+  var adminEmail = String(body.adminEmail || "")
+    .trim()
+    .toLowerCase();
+  var licenseKey = String(body.licenseKey || "").trim();
+
+  if (!schoolCode || !adminEmail || !licenseKey) {
+    return jsonResponse_({
+      success: false,
+      error: "Kod sekolah, email admin dan license key diperlukan.",
+    });
+  }
+
+  var sheet = getOrCreateSheet_(LICENSES_SHEET_NAME);
+  ensureHeaders_(sheet, LICENSE_HEADERS);
+
+  var lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return jsonResponse_({ success: false, error: "Lesen tidak dijumpai." });
+  }
+
+  var values = sheet.getRange(2, 1, lastRow, LICENSE_HEADERS.length).getValues();
+  var i;
+  var row;
+  var matchIndex = -1;
+
+  for (i = 0; i < values.length; i += 1) {
+    row = values[i];
+
+    if (String(row[0] || "").trim().toUpperCase() === schoolCode) {
+      matchIndex = i;
+      break;
+    }
+  }
+
+  if (matchIndex < 0) {
+    return jsonResponse_({ success: false, error: "Kod sekolah tidak dijumpai." });
+  }
+
+  row = values[matchIndex];
+
+  var rowAdminEmail = String(row[2] || "")
+    .trim()
+    .toLowerCase();
+  var rowLicenseKey = String(row[3] || "").trim();
+  var schoolName = String(row[1] || "").trim();
+  var maxStudents = Number(row[4]) || 0;
+  var status = String(row[5] || "")
+    .trim()
+    .toUpperCase();
+  var expiryDate = parseExpiryDate_(row[6]);
+
+  if (rowAdminEmail !== adminEmail) {
+    return jsonResponse_({ success: false, error: "Email admin tidak sepadan." });
+  }
+
+  if (rowLicenseKey !== licenseKey) {
+    return jsonResponse_({ success: false, error: "License key tidak sah." });
+  }
+
+  if (status !== "ACTIVE") {
+    return jsonResponse_({ success: false, error: "Lesen tidak aktif." });
+  }
+
+  if (!expiryDate) {
+    return jsonResponse_({
+      success: false,
+      error: "Tarikh luput lesen tidak sah.",
+    });
+  }
+
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+  var expiryDay = new Date(expiryDate.getTime());
+  expiryDay.setHours(0, 0, 0, 0);
+
+  if (expiryDay < today) {
+    return jsonResponse_({ success: false, error: "Lesen telah tamat tempoh." });
+  }
+
+  sheet.getRange(matchIndex + 2, 8).setValue(new Date());
+
+  return jsonResponse_({
+    success: true,
+    schoolName: schoolName,
+    maxStudents: maxStudents,
+    expiryDate: formatIsoDate_(expiryDate),
+  });
+}
+
+function parseExpiryDate_(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (
+    Object.prototype.toString.call(value) === "[object Date]" &&
+    !isNaN(value.getTime())
+  ) {
+    return value;
+  }
+
+  var parsed = new Date(String(value).trim());
+
+  if (!isNaN(parsed.getTime())) {
+    return parsed;
+  }
+
+  return null;
+}
+
+function formatIsoDate_(date) {
+  var year = date.getFullYear();
+  var month = date.getMonth() + 1;
+  var day = date.getDate();
+
+  return (
+    year +
+    "-" +
+    (month < 10 ? "0" : "") +
+    month +
+    "-" +
+    (day < 10 ? "0" : "") +
+    day
+  );
+}
+
+function rowValuesFromRecord_(row, syncedAt) {
+  return [
+    row.id || "",
+    row.schoolCode || "",
+    row.classId || "",
+    row.studentId || "",
+    row.studentName || "",
+    row.checkpointId || "",
+    row.category || "",
+    row.targetText || "",
+    row.transcript || "",
+    row.confidence !== undefined && row.confidence !== null ? row.confidence : "",
+    row.aiResult || "",
+    row.aiScore !== undefined && row.aiScore !== null ? row.aiScore : "",
+    row.teacherTP || "",
+    row.finalResult || "",
+    row.resultSource || "",
+    row.timestamp || "",
+    syncedAt,
+  ];
+}
+
+function getOrCreateSheet_(name) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(name);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+  }
+
+  return sheet;
+}
+
+function ensureHeaders_(sheet, headers) {
+  var lastRow = sheet.getLastRow();
+  var existing = [];
+  var i;
+  var match = true;
+
+  if (lastRow < 1) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    return;
+  }
+
+  existing = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
+
+  for (i = 0; i < headers.length; i += 1) {
+    if (String(existing[i] || "") !== headers[i]) {
+      match = false;
+      break;
+    }
+  }
+
+  if (!match) {
+    sheet.insertRowBefore(1);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
+}
+
+function jsonResponse_(payload) {
+  return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(
+    ContentService.MimeType.JSON
+  );
+}
