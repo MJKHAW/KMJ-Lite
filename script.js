@@ -3101,23 +3101,19 @@
   }
 
   function getLatihanChoiceQuestionText(correctAnswer) {
-    if (selectedCheckpoint === "vokal") {
-      return "Yang manakah huruf vokal '" + correctAnswer + "'?";
-    }
-
-    if (selectedCheckpoint === "konsonan") {
-      return "Yang manakah huruf konsonan '" + correctAnswer + "'?";
-    }
-
-    if (selectedCheckpoint === "suku_kata_kv") {
-      return "Yang manakah suku kata '" + correctAnswer + "'?";
-    }
-
     if (
       selectedCheckpoint === "perkataan_vkv" ||
       selectedCheckpoint === "perkataan_kvkv"
     ) {
       return "Pilih perkataan yang betul.";
+    }
+
+    if (
+      selectedCheckpoint === "vokal" ||
+      selectedCheckpoint === "konsonan" ||
+      selectedCheckpoint === "suku_kata_kv"
+    ) {
+      return "Pilih jawapan yang betul.";
     }
 
     return "Pilih jawapan yang betul.";
