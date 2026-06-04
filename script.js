@@ -4179,8 +4179,26 @@
     showPronunciationFeedbackMessage(belajarFeedback, message);
   }
 
+  function getBelajarFeedbackElement() {
+    if (belajarFeedback && belajarFeedback.isConnected) {
+      return belajarFeedback;
+    }
+
+    const found = document.getElementById("belajar-feedback");
+
+    if (found) {
+      belajarFeedback = found;
+      return found;
+    }
+
+    return belajarFeedback;
+  }
+
   function showBelajarWordSebutFeedback(feedbackEl, lines) {
-    if (!feedbackEl) {
+    const el = getBelajarFeedbackElement() || feedbackEl;
+
+    if (!el) {
+      console.warn("[Belajar Sebut] Tiada elemen #belajar-feedback untuk papar mesej.");
       return;
     }
 
@@ -4191,10 +4209,14 @@
       })
       .join("\n");
 
-    feedbackEl.style.whiteSpace = "pre-line";
-    feedbackEl.style.textAlign = "center";
-    feedbackEl.style.lineHeight = "1.35";
-    showPronunciationFeedbackMessage(feedbackEl, message);
+    el.style.whiteSpace = "pre-line";
+    el.style.textAlign = "center";
+    el.style.lineHeight = "1.35";
+    el.style.display = "block";
+    el.style.visibility = "visible";
+    el.style.zIndex = "30";
+    el.setAttribute("aria-hidden", "false");
+    showPronunciationFeedbackMessage(el, message);
   }
 
   async function persistBelajarWordAssessmentSilently() {
@@ -4213,20 +4235,86 @@
     await refreshStudentSyncBadge();
   }
 
-  function showBelajarWordSebutResultFeedback(feedbackEl, result, targetText) {
-    const heard = String(result.transcript || "").trim();
+  function resolveBelajarWordHeardTranscript(result) {
+    if (!result) {
+      return "";
+    }
 
-    console.log("[KMJ Belajar Sebut] Google API", {
-      target: targetText,
-      checkpoint: selectedCheckpoint,
-      mode: result.mode,
-      heard: heard,
-      failReason: result.failReason || null,
-      googleDebug: result.googleDebug || null,
+    const candidates = [
+      result.transcript,
+      result.rawTranscript,
+      result.detectedText,
+      result.googleDebug && result.googleDebug.transcript,
+      result.speech && result.speech.transcript,
+      result.record && result.record.transcript,
+    ];
+
+    let i;
+    let value;
+
+    for (i = 0; i < candidates.length; i += 1) {
+      value = String(candidates[i] || "").trim();
+
+      if (value) {
+        return value;
+      }
+    }
+
+    return "";
+  }
+
+  function isBelajarWordUnclearHearing(result, heard) {
+    if (!heard) {
+      return true;
+    }
+
+    if (result && result.timedOut) {
+      return true;
+    }
+
+    if (result && result.googleDebug && result.googleDebug.timedOut) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function renderBelajarWordSebutFeedback(feedbackEl, result, checkpointId, targetText) {
+    const el = getBelajarFeedbackElement() || feedbackEl;
+
+    console.log("[Belajar Sebut]", {
+      checkpointId: checkpointId,
+      targetText: targetText,
+      mode: result && result.mode,
+      aiResult: result && result.aiResult,
+      transcript: result && result.transcript,
+      confidence: result && result.confidence,
+      reasonKey: result && result.reasonKey,
+      heard: resolveBelajarWordHeardTranscript(result),
+      googleDebug: result && result.googleDebug,
     });
 
+    if (!el) {
+      return;
+    }
+
+    if (!result) {
+      showBelajarWordSebutFeedback(el, [
+        "Cuba lagi 😊",
+        "Google tidak dapat mendengar dengan jelas",
+      ]);
+      return;
+    }
+
+    if (result.mode === "api_unavailable") {
+      handleBelajarWordSebutApiUnavailable(el);
+      return;
+    }
+
+    const heard = resolveBelajarWordHeardTranscript(result);
+
     if (result.mode === "ai_verified") {
-      showBelajarWordSebutFeedback(feedbackEl, [
+      showBelajarWordSebutFeedback(el, [
         "Bagus! Sebutan betul ⭐",
         "Google dengar: " + (heard || "(kosong)"),
       ]);
@@ -4234,19 +4322,28 @@
     }
 
     if (result.mode === "ai_failed") {
-      if (!heard) {
-        showBelajarWordSebutFeedback(feedbackEl, [
+      if (isBelajarWordUnclearHearing(result, heard)) {
+        showBelajarWordSebutFeedback(el, [
           "Cuba lagi 😊",
           "Google tidak dapat mendengar dengan jelas",
         ]);
         return;
       }
 
-      showBelajarWordSebutFeedback(feedbackEl, [
+      showBelajarWordSebutFeedback(el, [
         "Cuba lagi 😊",
         "Google dengar: " + heard,
       ]);
+      return;
     }
+
+    console.warn("[Belajar Sebut] Mod tidak dikenali, papar mesej lalai.", result.mode);
+    showBelajarWordSebutFeedback(el, [
+      "Cuba lagi 😊",
+      isBelajarWordUnclearHearing(result, heard)
+        ? "Google tidak dapat mendengar dengan jelas"
+        : "Google dengar: " + (heard || "(kosong)"),
+    ]);
   }
 
   function isStudentBrowserOffline() {
@@ -6654,49 +6751,73 @@
   }
 
   function handleBelajarWordSebutApiUnavailable(feedbackEl) {
+    const el = getBelajarFeedbackElement() || feedbackEl;
+
     if (recordBelajarWordGoogleApiFailure()) {
       resetBelajarWordGoogleApiFailStreak();
       showBelajarWordAiFallbackOverlay();
       return;
     }
 
-    showPronunciationFeedbackMessage(
-      feedbackEl,
-      "Cuba tekan Sebut sekali lagi."
-    );
+    showBelajarWordSebutFeedback(el, "Cuba tekan Sebut sekali lagi.");
   }
 
   async function runBelajarWordSebutHybrid(options) {
     const screenName = options.screenName || "belajar";
     const targetText = options.targetText;
-    const feedbackEl = options.feedbackEl;
     const checkpoint = options.checkpoint || getPronunciationCheckpoint();
+    const feedbackEl = getBelajarFeedbackElement() || options.feedbackEl;
     const engine = window.KMJ_Assessment || window.KMJ_Pronunciation;
+    let result = null;
 
-    showPronunciationFeedbackMessage(feedbackEl, "Dengar... Sila sebut!");
+    showBelajarWordSebutFeedback(feedbackEl, "Dengar... Sila sebut!");
 
-    const result = await engine.runBelajarWordSebut({
-      checkpointId: checkpoint,
-      targetText: targetText,
-    });
+    try {
+      if (!engine || !engine.runBelajarWordSebut) {
+        console.error("[Belajar Sebut] runBelajarWordSebut tidak tersedia.");
+        handleBelajarWordSebutApiUnavailable(feedbackEl);
+        return;
+      }
+
+      result = await engine.runBelajarWordSebut({
+        checkpointId: checkpoint,
+        targetText: targetText,
+      });
+    } catch (sebutError) {
+      console.error("[Belajar Sebut] Ralat semasa Sebut", sebutError);
+
+      if (activeScreen !== screenName) {
+        return;
+      }
+
+      const unavailable = mapBelajarWordSebutErrorToUnavailable(sebutError);
+
+      if (unavailable) {
+        handleBelajarWordSebutApiUnavailable(feedbackEl);
+        return;
+      }
+
+      showBelajarWordSebutFeedback(feedbackEl, "Cuba tekan Sebut sekali lagi.");
+      return;
+    }
 
     if (activeScreen !== screenName) {
       return;
     }
 
-    hidePronunciationFeedback(feedbackEl);
-
-    if (result.mode === "api_unavailable") {
+    if (result && result.mode === "api_unavailable") {
       handleBelajarWordSebutApiUnavailable(feedbackEl);
       return;
     }
 
-    resetBelajarWordGoogleApiFailStreak();
-
-    if (result.mode === "ai_verified" || result.mode === "ai_failed") {
-      showBelajarWordSebutResultFeedback(feedbackEl, result, targetText);
+    if (result && (result.mode === "ai_verified" || result.mode === "ai_failed")) {
+      resetBelajarWordGoogleApiFailStreak();
+      renderBelajarWordSebutFeedback(feedbackEl, result, checkpoint, targetText);
       void persistBelajarWordAssessmentSilently();
+      return;
     }
+
+    renderBelajarWordSebutFeedback(feedbackEl, result, checkpoint, targetText);
   }
 
   async function runHybridSebutFlow(options) {
@@ -6865,7 +6986,15 @@
       if (engine && engine.isShortSoundCheckpoint(checkpoint)) {
         resetDeferredSebutUi(feedbackEl);
       } else {
-        hidePronunciationFeedback(feedbackEl);
+        if (
+          !(
+            (options.mode || "belajar") === "belajar" &&
+            isBelajarWordModeCheckpoint(checkpoint)
+          )
+        ) {
+          hidePronunciationFeedback(feedbackEl);
+        }
+
         stopPronunciationCapture();
       }
 
@@ -6895,10 +7024,9 @@
       screenName: "belajar",
       checkpoint: checkpoint,
       targetText: getCurrentBelajarAudioText(),
-      feedbackEl: belajarFeedback,
+      feedbackEl: getBelajarFeedbackElement(),
       onBeforeListen: function () {
         stopBelajarAudio();
-        hideBelajarFeedback();
       },
     });
   }

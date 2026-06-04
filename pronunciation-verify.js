@@ -3327,7 +3327,8 @@
     stopActiveSession();
 
     const evaluation = evaluateWordModeSpeech(targetText, speech);
-    const transcript = evaluation.transcript || "";
+    const rawTranscript = String(speech.transcript || "").trim();
+    const transcript = String(evaluation.transcript || rawTranscript || "").trim();
     const status = evaluation.pass ? "ai_verified" : "ai_failed";
     const googleDebug = buildBelajarGoogleSpeechDebug(targetText, speech, evaluation);
 
@@ -3365,8 +3366,11 @@
         isCorrect: true,
         similarityPercent: evaluation.score,
         transcript: transcript,
+        rawTranscript: rawTranscript,
+        detectedText: transcript,
         confidence: evaluation.confidence,
         failReason: null,
+        timedOut: !!speech.timedOut,
         aiResult: evaluation.aiResult,
         finalResult: evaluation.finalResult,
         recordId: record.id,
@@ -3381,7 +3385,10 @@
       similarityPercent: evaluation.score,
       failReason: evaluation.failReason,
       transcript: transcript,
+      rawTranscript: rawTranscript,
+      detectedText: transcript,
       confidence: evaluation.confidence,
+      timedOut: !!speech.timedOut,
       aiResult: evaluation.aiResult,
       finalResult: evaluation.finalResult,
       recordId: record.id,
