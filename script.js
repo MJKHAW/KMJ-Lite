@@ -4206,6 +4206,107 @@
     return rounds.slice(0, total);
   }
 
+  function buildCabaranKonsonanFirstLetterRound(syllable) {
+    const w = String(syllable || "").trim().toLowerCase();
+    const konsonan = BELAJAR_CONTENT.konsonan;
+
+    if (!w.length || konsonan.indexOf(w.charAt(0)) < 0) {
+      return null;
+    }
+
+    const correctAnswer = w.charAt(0);
+    const distractors = shuffleArray(
+      konsonan.filter(function (k) {
+        return k !== correctAnswer;
+      })
+    ).slice(0, 2);
+    const options = shuffleArray([correctAnswer].concat(distractors));
+
+    return {
+      audioWord: w,
+      audioFolder: "suku_kata_kv",
+      prefix: "",
+      suffix: w.slice(1),
+      correctAnswer: correctAnswer,
+      options: options,
+      correctIndex: options.indexOf(correctAnswer),
+      difficulty: "medium",
+      showBlank: true,
+    };
+  }
+
+  function buildCabaranKonsonanMiddleLetterRound(word) {
+    const w = String(word || "").trim().toLowerCase();
+    const konsonan = BELAJAR_CONTENT.konsonan;
+    const middlePos = 1;
+
+    if (w.length < 3 || konsonan.indexOf(w.charAt(middlePos)) < 0) {
+      return null;
+    }
+
+    const correctAnswer = w.charAt(middlePos);
+    const distractors = shuffleArray(
+      konsonan.filter(function (k) {
+        return k !== correctAnswer;
+      })
+    ).slice(0, 2);
+    const options = shuffleArray([correctAnswer].concat(distractors));
+
+    return {
+      audioWord: w,
+      audioFolder: "perkataan_vkv",
+      prefix: w.charAt(0),
+      suffix: w.slice(middlePos + 1),
+      correctAnswer: correctAnswer,
+      options: options,
+      correctIndex: options.indexOf(correctAnswer),
+      difficulty: "hard",
+      showBlank: true,
+    };
+  }
+
+  function buildCabaranKonsonanQuestionSequence(total) {
+    const konsonanItems = buildPracticeSequence(
+      BELAJAR_CONTENT.konsonan.slice(),
+      CABARAN_SHORT_EASY_COUNT
+    );
+    const kvSyllables = buildPracticeSequence(
+      getCabaranTaughtSyllablePool(),
+      CABARAN_SHORT_MEDIUM_COUNT
+    );
+    const vkvWords = buildPracticeSequence(
+      BELAJAR_CONTENT.perkataan_vkv.slice(),
+      CABARAN_SHORT_HARD_COUNT
+    );
+    const rounds = [];
+
+    konsonanItems.forEach(function (item) {
+      rounds.push(buildCabaranEasyChoiceRound(item));
+    });
+
+    kvSyllables.forEach(function (syllable) {
+      const round = buildCabaranKonsonanFirstLetterRound(syllable);
+
+      if (round) {
+        rounds.push(round);
+      }
+    });
+
+    vkvWords.forEach(function (word) {
+      const round = buildCabaranKonsonanMiddleLetterRound(word);
+
+      if (round) {
+        rounds.push(round);
+      }
+    });
+
+    while (rounds.length < total) {
+      rounds.push(buildCabaranEasyChoiceRound(BELAJAR_CONTENT.konsonan[0] || "b"));
+    }
+
+    return rounds.slice(0, total);
+  }
+
   function buildCabaranShortSoundQuestionSequence(total) {
     const easyItems = buildPracticeSequence(
       getLatihanPracticePool(),
@@ -4259,6 +4360,10 @@
     if (isCabaranChoiceCheckpoint()) {
       if (selectedCheckpoint === "vokal") {
         cabaranQuestionItems = buildCabaranVokalQuestionSequence(
+          CABARAN_TOTAL_QUESTIONS
+        );
+      } else if (selectedCheckpoint === "konsonan") {
+        cabaranQuestionItems = buildCabaranKonsonanQuestionSequence(
           CABARAN_TOTAL_QUESTIONS
         );
       } else {
