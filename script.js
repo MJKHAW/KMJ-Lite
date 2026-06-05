@@ -3,6 +3,8 @@
 
   const DEBUG_HOTSPOTS = false;
   const DEBUG_TULIS_HOTSPOTS = false;
+  /** Set true to show red outline boxes for every Cabaran HTML overlay (adjust CABARAN_OVERLAY_LAYOUT). */
+  const DEBUG_CABARAN_LAYOUT = false;
   const LATIHAN_CALIBRATION_MODE = false;
   const LATIHAN_EASY_ADJUST_MODE = false;
 
@@ -14,11 +16,75 @@
     answerB: { left: 40, top: 57, width: 19, height: 25 },
     answerC: { left: 67, top: 57, width: 25, height: 25 },
     kembali: { left: 4, top: 88, width: 25, height: 7 },
-    ulang: { left: 38, top: 88, width: 24, height: 7 },
+    ulang: { left: 38.2, top: 84.7, width: 24, height: 7 },
     seterusnya: { left: 67, top: 88, width: 25, height: 7 },
     reinforcement: { left: 41.6, top: 20.1, width: 36.1, height: 13.8 },
     feedback: { left: 31, top: 40, width: 38, height: 6 },
   };
+
+  /**
+   * Cabaran HTML overlay positions (% of screen). Edit values here to adjust phone/tablet layout.
+   * Visual reference: assets/cabaran.png — set DEBUG_CABARAN_LAYOUT = true to see red boxes.
+   */
+  const CABARAN_OVERLAY_LAYOUT = {
+    progressBox: { left: 19.4,top: 23.5,width: 64,height: 5 },
+    instructionText: { left: 12, top: 33, width: 76, height: 5 },
+    blankQuestion: { left: 12, top: 40, width: 76, height: 10 },
+    audioVisual: { left: 40, top: 40, width: 20, height: 10 },
+    answerA: { left: 12, top: 58, width: 24, height: 11 },
+    answerB: { left: 38, top: 58, width: 24, height: 11 },
+    answerC: { left: 64, top: 58, width: 24, height: 11 },
+    feedbackText: { left: 26, top: 74, width: 48, height: 6 },
+    targetWord: { left: 12, top: 40, width: 76, height: 10 },
+    susunAnswer: { left: 10, top: 46, width: 80, height: 12 },
+    susunDrag: { left: 10, top: 60, width: 80, height: 12 },
+    timerBox: { left: 73.9, top: 81.6, width: 12, height: 8, fontSize: 6 },
+  };
+  const CABARAN_OVERLAY_LAYOUT_DEFAULT = JSON.parse(
+    JSON.stringify(CABARAN_OVERLAY_LAYOUT)
+  );
+
+  /** Cabaran fixed button hotspots (%). Calibrate with DEBUG_CABARAN_LAYOUT = true. */
+  const CABARAN_BUTTON_LAYOUT = {
+    exitButton: { left: 84, top: 3, width: 11, height: 8 },
+    submenuButton: { left: 3, top: 3, width: 14, height: 8 },
+    ulangButton: { left: 38, top: 88, width: 24, height: 7 },
+  };
+  const CABARAN_BUTTON_LAYOUT_DEFAULT = JSON.parse(
+    JSON.stringify(CABARAN_BUTTON_LAYOUT)
+  );
+  const CABARAN_BUTTON_LAYOUT_KEYS = [
+    "exitButton",
+    "submenuButton",
+    "ulangButton",
+  ];
+
+  const CABARAN_LAYOUT_STORAGE_KEY = "kmj_cabaran_overlay_layout_debug_v1";
+  const CABARAN_LAYOUT_PANEL_HIDDEN_KEY = "kmj_cabaran_layout_panel_hidden_v1";
+  const CABARAN_LAYOUT_KEYS = [
+    "progressBox",
+    "instructionText",
+    "blankQuestion",
+    "audioVisual",
+    "answerA",
+    "answerB",
+    "answerC",
+    "feedbackText",
+    "targetWord",
+    "susunAnswer",
+    "susunDrag",
+    "timerBox",
+  ];
+  const CABARAN_CALIBRATION_KEYS = CABARAN_LAYOUT_KEYS.concat(
+    CABARAN_BUTTON_LAYOUT_KEYS
+  );
+
+  const CABARAN_CHOICE_COUNTDOWN_SEC = 10;
+  const CABARAN_SUSUN_COUNTDOWN_SEC = 20;
+
+  const CABARAN_SHORT_EASY_COUNT = 4;
+  const CABARAN_SHORT_MEDIUM_COUNT = 3;
+  const CABARAN_SHORT_HARD_COUNT = 3;
 
   /** Measured from assets/tulis.png (1080x1920). */
   const TULIS_BOTTOM_HOTSPOT_RECTS = [
@@ -412,18 +478,7 @@
     },
     cabaran: {
       image: "assets/cabaran.png",
-      hotspots: [
-        {
-          id: "back",
-          label: "Kembali",
-          left: 3,
-          top: 3,
-          width: 14,
-          height: 8,
-          action: "go",
-          target: "belajar",
-        },
-      ],
+      hotspots: [],
     },
     result: {
       image: "assets/result.png",
@@ -589,7 +644,17 @@
   let latihanChoiceHintVisible = false;
   let latihanCompletionOverlayEl = null;
   let latihanCompletionSecondaryBtn = null;
-  const CABARAN_COMING_SOON_MSG = "Cabaran akan dibina selepas ini.";
+  const CABARAN_TOTAL_QUESTIONS = 10;
+  const CABARAN_SPEECH_TIMEOUT_MS = 3500;
+  const CABARAN_DB_NAME = "KMJ_Cabaran_Lite";
+  const CABARAN_DB_VERSION = 3;
+  const CABARAN_SUMMARIES_STORE = "cabaran_summaries";
+  const CABARAN_LEARNING_UNLOCKS_STORE = "learning_unlocks";
+  /** One row per school + class + student + checkpoint; repeated Cabaran overwrites via IndexedDB put. */
+  const CABARAN_SUMMARY_SYNC_MODE = "upsert";
+  /** updatedAt = latest Cabaran completion time (ISO 8601, e.g. 2026-06-07T09:12:05.000Z). */
+  const CABARAN_CORRECT_FEEDBACK = "Betul ⭐";
+  const CABARAN_WRONG_FEEDBACK = "Cuba lagi 😊";
   let latihanQuestionStartToken = 0;
 
   const LATIHAN_CHOICE_TOTAL = 10;
@@ -603,6 +668,44 @@
   const LATIHAN_ANSWER_KEYS = ["answerA", "answerB", "answerC"];
   const LATIHAN_ANSWER_IDS = ["a", "b", "c"];
   let cabaranFeedback = null;
+  let cabaranZoneEl = null;
+  let cabaranProgressEl = null;
+  let cabaranQuestionEl = null;
+  let cabaranAudioVisualEl = null;
+  let cabaranBlankQuestionEl = null;
+  let cabaranBlankPrefixEl = null;
+  let cabaranBlankSlotEl = null;
+  let cabaranBlankSuffixEl = null;
+  let cabaranTargetEl = null;
+  let cabaranAnswersEl = null;
+  let cabaranAnswerBtns = [];
+  let cabaranSusunAnswerEl = null;
+  let cabaranSusunDragEl = null;
+  let cabaranSusunSlotEls = [];
+  let cabaranSusunChipEls = [];
+  let cabaranSusunCurrentRound = null;
+  let cabaranSusunPointerDrag = null;
+  let cabaranSummaryOverlayEl = null;
+  let cabaranQuestionNum = 1;
+  let cabaranQuestionItems = [];
+  let cabaranCorrectCount = 0;
+  let cabaranSessionAnswers = [];
+  let cabaranChoiceCorrectIndex = -1;
+  let cabaranQuestionLocked = false;
+  let cabaranBusy = false;
+  let cabaranAdvanceTimer = null;
+  let cabaranTimerEl = null;
+  let cabaranCountdownInterval = null;
+  let cabaranCountdownSeconds = 0;
+  let cabaranDbPromise = null;
+  let cabaranActiveRecognition = null;
+  let cabaranLayoutDebugPanelEl = null;
+  let cabaranLayoutDebugInfoEl = null;
+  let cabaranLayoutDebugShowTabEl = null;
+  let cabaranLayoutDebugPanelHidden = false;
+  let cabaranLayoutDebugKeybound = false;
+  let cabaranLayoutDragState = null;
+  let cabaranButtonHotspotEls = {};
   let teacherPinOverlay = null;
   let teacherLicenseOverlay = null;
   let teacherDashboardOverlay = null;
@@ -636,6 +739,695 @@
 
   function applyDebugMode() {
     document.body.classList.toggle("debug-hotspots", DEBUG_HOTSPOTS);
+    applyCabaranDebugMode();
+  }
+
+  function roundCabaranPct(value) {
+    return Math.round(value * 10) / 10;
+  }
+
+  function clampCabaranLayoutRect(rect) {
+    rect.width = roundCabaranPct(Math.max(2, Math.min(100 - rect.left, rect.width)));
+    rect.height = roundCabaranPct(Math.max(2, Math.min(100 - rect.top, rect.height)));
+    rect.left = roundCabaranPct(Math.max(0, Math.min(100 - rect.width, rect.left)));
+    rect.top = roundCabaranPct(Math.max(0, Math.min(100 - rect.height, rect.top)));
+  }
+
+  function isCabaranButtonLayoutKey(layoutKey) {
+    return CABARAN_BUTTON_LAYOUT_KEYS.indexOf(layoutKey) >= 0;
+  }
+
+  function getCabaranLayoutRect(layoutKey) {
+    if (isCabaranButtonLayoutKey(layoutKey)) {
+      return CABARAN_BUTTON_LAYOUT[layoutKey] || null;
+    }
+
+    return CABARAN_OVERLAY_LAYOUT[layoutKey] || null;
+  }
+
+  function getCabaranOverlayPointerEvents(layoutKey) {
+    if (DEBUG_CABARAN_LAYOUT) {
+      return "auto";
+    }
+
+    if (
+      layoutKey === "answerA" ||
+      layoutKey === "answerB" ||
+      layoutKey === "answerC" ||
+      layoutKey === "susunAnswer" ||
+      layoutKey === "susunDrag"
+    ) {
+      return "auto";
+    }
+
+    return "none";
+  }
+
+  function loadCabaranLayoutDebugPanelHidden() {
+    if (!DEBUG_CABARAN_LAYOUT || !window.localStorage) {
+      return;
+    }
+
+    try {
+      cabaranLayoutDebugPanelHidden =
+        window.localStorage.getItem(CABARAN_LAYOUT_PANEL_HIDDEN_KEY) === "1";
+    } catch (error) {
+      cabaranLayoutDebugPanelHidden = false;
+    }
+  }
+
+  function saveCabaranLayoutDebugPanelHidden() {
+    if (!DEBUG_CABARAN_LAYOUT || !window.localStorage) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        CABARAN_LAYOUT_PANEL_HIDDEN_KEY,
+        cabaranLayoutDebugPanelHidden ? "1" : "0"
+      );
+    } catch (error) {
+      // Ignore.
+    }
+  }
+
+  function positionCabaranLayoutDebugPanel() {
+    if (!cabaranLayoutDebugPanelEl || cabaranLayoutDebugPanelHidden) {
+      return;
+    }
+
+    const stage = document.getElementById("stage");
+    const panel = cabaranLayoutDebugPanelEl;
+
+    if (!stage || !panel) {
+      return;
+    }
+
+    const stageRect = stage.getBoundingClientRect();
+    const panelWidth = panel.offsetWidth || 220;
+    const gap = 12;
+    const canDockRight = stageRect.right + gap + panelWidth <= window.innerWidth - 8;
+
+    panel.classList.toggle("is-docked-right", canDockRight);
+    panel.classList.toggle("is-docked-fallback", !canDockRight);
+
+    if (canDockRight) {
+      panel.style.left = Math.round(stageRect.right + gap) + "px";
+      panel.style.top = Math.max(8, Math.round(stageRect.top + 8)) + "px";
+      panel.style.right = "auto";
+      panel.style.bottom = "auto";
+    } else {
+      panel.style.left = "auto";
+      panel.style.right = "8px";
+      panel.style.top = "auto";
+      panel.style.bottom = "8px";
+    }
+
+    if (cabaranLayoutDebugShowTabEl) {
+      if (canDockRight) {
+        cabaranLayoutDebugShowTabEl.style.left =
+          Math.round(stageRect.right + gap) + "px";
+        cabaranLayoutDebugShowTabEl.style.top =
+          Math.max(8, Math.round(stageRect.top + 8)) + "px";
+        cabaranLayoutDebugShowTabEl.style.right = "auto";
+        cabaranLayoutDebugShowTabEl.style.bottom = "auto";
+      } else {
+        cabaranLayoutDebugShowTabEl.style.left = "auto";
+        cabaranLayoutDebugShowTabEl.style.right = "8px";
+        cabaranLayoutDebugShowTabEl.style.top = "auto";
+        cabaranLayoutDebugShowTabEl.style.bottom = "8px";
+      }
+    }
+  }
+
+  function updateCabaranLayoutDebugPanelVisibility() {
+    if (!DEBUG_CABARAN_LAYOUT) {
+      if (cabaranLayoutDebugPanelEl) {
+        cabaranLayoutDebugPanelEl.style.display = "none";
+      }
+
+      if (cabaranLayoutDebugShowTabEl) {
+        cabaranLayoutDebugShowTabEl.style.display = "none";
+      }
+
+      return;
+    }
+
+    const onCabaran = activeScreen === "cabaran";
+
+    if (cabaranLayoutDebugPanelEl) {
+      cabaranLayoutDebugPanelEl.style.display =
+        onCabaran && !cabaranLayoutDebugPanelHidden ? "block" : "none";
+    }
+
+    if (cabaranLayoutDebugShowTabEl) {
+      cabaranLayoutDebugShowTabEl.style.display =
+        onCabaran && cabaranLayoutDebugPanelHidden ? "block" : "none";
+    }
+
+    if (onCabaran && !cabaranLayoutDebugPanelHidden) {
+      positionCabaranLayoutDebugPanel();
+    } else if (onCabaran && cabaranLayoutDebugPanelHidden) {
+      positionCabaranLayoutDebugPanel();
+    }
+  }
+
+  function setCabaranLayoutDebugPanelHidden(hidden) {
+    cabaranLayoutDebugPanelHidden = !!hidden;
+    saveCabaranLayoutDebugPanelHidden();
+    updateCabaranLayoutDebugPanelVisibility();
+  }
+
+  function toggleCabaranLayoutDebugPanelVisibility() {
+    setCabaranLayoutDebugPanelHidden(!cabaranLayoutDebugPanelHidden);
+  }
+
+  function bindCabaranLayoutDebugKeyboard() {
+    if (cabaranLayoutDebugKeybound) {
+      return;
+    }
+
+    cabaranLayoutDebugKeybound = true;
+
+    document.addEventListener("keydown", function (event) {
+      if (!DEBUG_CABARAN_LAYOUT || activeScreen !== "cabaran") {
+        return;
+      }
+
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      const tag = event.target && event.target.tagName;
+
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+        return;
+      }
+
+      if (event.key === "d" || event.key === "D") {
+        event.preventDefault();
+        toggleCabaranLayoutDebugPanelVisibility();
+      }
+    });
+  }
+
+  function getCabaranOverlayElementByKey(layoutKey) {
+    switch (layoutKey) {
+      case "progressBox":
+        return cabaranProgressEl;
+      case "instructionText":
+        return cabaranQuestionEl;
+      case "blankQuestion":
+        return cabaranBlankQuestionEl;
+      case "audioVisual":
+        return cabaranAudioVisualEl;
+      case "answerA":
+        return cabaranAnswerBtns[0] || null;
+      case "answerB":
+        return cabaranAnswerBtns[1] || null;
+      case "answerC":
+        return cabaranAnswerBtns[2] || null;
+      case "feedbackText":
+        return cabaranFeedback;
+      case "targetWord":
+        return cabaranTargetEl;
+      case "susunAnswer":
+        return cabaranSusunAnswerEl;
+      case "susunDrag":
+        return cabaranSusunDragEl;
+      case "timerBox":
+        return cabaranTimerEl;
+      default:
+        return null;
+    }
+  }
+
+  function appendCabaranLayoutBlockForCopy(output, objectName, keys, layoutStore) {
+    output += "const " + objectName + " = {\n";
+
+    keys.forEach(function (key) {
+      const rect = layoutStore[key];
+
+      if (!rect) {
+        return;
+      }
+
+      output +=
+        "  " +
+        key +
+        ": { left: " +
+        roundCabaranPct(rect.left) +
+        ", top: " +
+        roundCabaranPct(rect.top) +
+        ", width: " +
+        roundCabaranPct(rect.width) +
+        ", height: " +
+        roundCabaranPct(rect.height);
+
+      if (rect.fontSize != null) {
+        output += ", fontSize: " + rect.fontSize;
+      }
+
+      output += " },\n";
+    });
+
+    output += "};";
+    return output;
+  }
+
+  function serializeCabaranOverlayLayoutForCopy() {
+    let output = appendCabaranLayoutBlockForCopy(
+      "",
+      "CABARAN_OVERLAY_LAYOUT",
+      CABARAN_LAYOUT_KEYS,
+      CABARAN_OVERLAY_LAYOUT
+    );
+
+    output += "\n\n";
+    output += appendCabaranLayoutBlockForCopy(
+      "",
+      "CABARAN_BUTTON_LAYOUT",
+      CABARAN_BUTTON_LAYOUT_KEYS,
+      CABARAN_BUTTON_LAYOUT
+    );
+
+    return output;
+  }
+
+  function saveCabaranLayoutDebugToStorage() {
+    if (!DEBUG_CABARAN_LAYOUT || !window.localStorage) {
+      return;
+    }
+
+    const payload = {};
+    CABARAN_CALIBRATION_KEYS.forEach(function (key) {
+      const rect = getCabaranLayoutRect(key);
+      if (rect) {
+        payload[key] = {
+          left: roundCabaranPct(rect.left),
+          top: roundCabaranPct(rect.top),
+          width: roundCabaranPct(rect.width),
+          height: roundCabaranPct(rect.height),
+        };
+
+        if (rect.fontSize != null) {
+          payload[key].fontSize = rect.fontSize;
+        }
+      }
+    });
+
+    try {
+      window.localStorage.setItem(CABARAN_LAYOUT_STORAGE_KEY, JSON.stringify(payload));
+    } catch (error) {
+      // Ignore storage quota/privacy errors in debug mode.
+    }
+  }
+
+  function loadCabaranLayoutDebugFromStorage() {
+    if (!DEBUG_CABARAN_LAYOUT || !window.localStorage) {
+      return;
+    }
+
+    let raw;
+    let parsed;
+
+    try {
+      raw = window.localStorage.getItem(CABARAN_LAYOUT_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      return;
+    }
+
+    CABARAN_CALIBRATION_KEYS.forEach(function (key) {
+      if (!parsed[key]) {
+        return;
+      }
+
+      const rect = getCabaranLayoutRect(key);
+
+      if (!rect) {
+        return;
+      }
+
+      rect.left = Number(parsed[key].left);
+      rect.top = Number(parsed[key].top);
+      rect.width = Number(parsed[key].width);
+      rect.height = Number(parsed[key].height);
+
+      if (parsed[key].fontSize != null) {
+        rect.fontSize = parsed[key].fontSize;
+      }
+
+      clampCabaranLayoutRect(rect);
+    });
+  }
+
+  function resetCabaranLayoutDebug() {
+    CABARAN_LAYOUT_KEYS.forEach(function (key) {
+      if (!CABARAN_OVERLAY_LAYOUT[key] || !CABARAN_OVERLAY_LAYOUT_DEFAULT[key]) {
+        return;
+      }
+
+      CABARAN_OVERLAY_LAYOUT[key].left = CABARAN_OVERLAY_LAYOUT_DEFAULT[key].left;
+      CABARAN_OVERLAY_LAYOUT[key].top = CABARAN_OVERLAY_LAYOUT_DEFAULT[key].top;
+      CABARAN_OVERLAY_LAYOUT[key].width = CABARAN_OVERLAY_LAYOUT_DEFAULT[key].width;
+      CABARAN_OVERLAY_LAYOUT[key].height = CABARAN_OVERLAY_LAYOUT_DEFAULT[key].height;
+
+      if (CABARAN_OVERLAY_LAYOUT_DEFAULT[key].fontSize != null) {
+        CABARAN_OVERLAY_LAYOUT[key].fontSize =
+          CABARAN_OVERLAY_LAYOUT_DEFAULT[key].fontSize;
+      }
+    });
+
+    CABARAN_BUTTON_LAYOUT_KEYS.forEach(function (key) {
+      if (!CABARAN_BUTTON_LAYOUT[key] || !CABARAN_BUTTON_LAYOUT_DEFAULT[key]) {
+        return;
+      }
+
+      CABARAN_BUTTON_LAYOUT[key].left = CABARAN_BUTTON_LAYOUT_DEFAULT[key].left;
+      CABARAN_BUTTON_LAYOUT[key].top = CABARAN_BUTTON_LAYOUT_DEFAULT[key].top;
+      CABARAN_BUTTON_LAYOUT[key].width = CABARAN_BUTTON_LAYOUT_DEFAULT[key].width;
+      CABARAN_BUTTON_LAYOUT[key].height = CABARAN_BUTTON_LAYOUT_DEFAULT[key].height;
+    });
+
+    try {
+      window.localStorage.removeItem(CABARAN_LAYOUT_STORAGE_KEY);
+    } catch (error) {
+      // Ignore.
+    }
+
+    applyCabaranOverlayLayout();
+    applyCabaranButtonLayout();
+    updateCabaranLayoutDebugInfo();
+  }
+
+  function updateCabaranLayoutDebugInfo(layoutKey) {
+    if (!cabaranLayoutDebugInfoEl) {
+      return;
+    }
+
+    const key = layoutKey || (cabaranLayoutDragState && cabaranLayoutDragState.layoutKey);
+
+    const rect = key ? getCabaranLayoutRect(key) : null;
+
+    if (!key || !rect) {
+      cabaranLayoutDebugInfoEl.textContent = "Tap a red box to calibrate";
+      return;
+    }
+    let infoText =
+      key +
+      "\nleft: " +
+      roundCabaranPct(rect.left) +
+      "\ntop: " +
+      roundCabaranPct(rect.top) +
+      "\nwidth: " +
+      roundCabaranPct(rect.width) +
+      "\nheight: " +
+      roundCabaranPct(rect.height);
+
+    if (rect.fontSize != null) {
+      infoText += "\nfontSize: " + rect.fontSize;
+    }
+
+    cabaranLayoutDebugInfoEl.textContent = infoText;
+  }
+
+  function endCabaranLayoutDrag() {
+    if (!cabaranLayoutDragState) {
+      return;
+    }
+
+    cabaranLayoutDragState = null;
+    saveCabaranLayoutDebugToStorage();
+  }
+
+  function onCabaranLayoutPointerMove(event) {
+    if (!DEBUG_CABARAN_LAYOUT || !cabaranLayoutDragState) {
+      return;
+    }
+
+    const state = cabaranLayoutDragState;
+    const currentRect = getCabaranLayoutRect(state.layoutKey);
+
+    if (!state.screenRect || !currentRect) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const deltaXPct = ((event.clientX - state.startX) / state.screenRect.width) * 100;
+    const deltaYPct = ((event.clientY - state.startY) / state.screenRect.height) * 100;
+
+    if (state.mode === "resize") {
+      currentRect.width = state.startRect.width + deltaXPct;
+      currentRect.height = state.startRect.height + deltaYPct;
+    } else {
+      currentRect.left = state.startRect.left + deltaXPct;
+      currentRect.top = state.startRect.top + deltaYPct;
+    }
+
+    clampCabaranLayoutRect(currentRect);
+
+    if (isCabaranButtonLayoutKey(state.layoutKey)) {
+      applyCabaranButtonLayout();
+    } else {
+      applyCabaranOverlayLayout();
+    }
+
+    updateCabaranLayoutDebugInfo(state.layoutKey);
+  }
+
+  function beginCabaranLayoutDrag(event, layoutKey, mode) {
+    if (!DEBUG_CABARAN_LAYOUT) {
+      return;
+    }
+
+    const screen = document.getElementById("screen-cabaran");
+    const rect = getCabaranLayoutRect(layoutKey);
+
+    if (!screen || !rect) {
+      return;
+    }
+
+    const screenRect = screen.getBoundingClientRect();
+    const target = event.currentTarget;
+
+    cabaranLayoutDragState = {
+      layoutKey: layoutKey,
+      mode: mode || "move",
+      startX: event.clientX,
+      startY: event.clientY,
+      startRect: {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+      },
+      screenRect: screenRect,
+    };
+
+    updateCabaranLayoutDebugInfo(layoutKey);
+
+    if (target && target.setPointerCapture) {
+      target.setPointerCapture(event.pointerId);
+    }
+  }
+
+  function attachCabaranOverlayDebugInteractions(el, layoutKey) {
+    if (!el || !layoutKey || el.dataset.cabaranDebugBound === "1") {
+      return;
+    }
+
+    el.dataset.cabaranDebugBound = "1";
+    el.classList.add("cabaran-layout-debug-target");
+
+    el.addEventListener("pointerdown", function (event) {
+      if (!DEBUG_CABARAN_LAYOUT) {
+        return;
+      }
+
+      if (event.target && event.target.classList.contains("cabaran-layout-resize-handle")) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      beginCabaranLayoutDrag(event, layoutKey, "move");
+    });
+
+    const handle = document.createElement("span");
+    handle.className = "cabaran-layout-resize-handle";
+    handle.setAttribute("aria-hidden", "true");
+    handle.addEventListener("pointerdown", function (event) {
+      if (!DEBUG_CABARAN_LAYOUT) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      beginCabaranLayoutDrag(event, layoutKey, "resize");
+    });
+    el.appendChild(handle);
+  }
+
+  function ensureCabaranLayoutDebugUi() {
+    if (!DEBUG_CABARAN_LAYOUT) {
+      return;
+    }
+
+    const appRoot = document.getElementById("app");
+
+    if (!appRoot || cabaranLayoutDebugPanelEl) {
+      return;
+    }
+
+    loadCabaranLayoutDebugPanelHidden();
+
+    const panel = document.createElement("div");
+    panel.id = "cabaran-layout-debug-panel";
+
+    const titleRow = document.createElement("div");
+    titleRow.className = "cabaran-layout-debug-title-row";
+
+    const title = document.createElement("p");
+    title.className = "cabaran-layout-debug-title";
+    title.textContent = "Cabaran Layout Debug";
+
+    const hideBtn = document.createElement("button");
+    hideBtn.type = "button";
+    hideBtn.className = "cabaran-layout-debug-btn cabaran-layout-debug-hide-btn";
+    hideBtn.textContent = "Hide Panel";
+    hideBtn.addEventListener("click", function () {
+      setCabaranLayoutDebugPanelHidden(true);
+    });
+
+    titleRow.appendChild(title);
+    titleRow.appendChild(hideBtn);
+
+    const info = document.createElement("pre");
+    info.className = "cabaran-layout-debug-info";
+    info.textContent = "Tap a red box to calibrate";
+    cabaranLayoutDebugInfoEl = info;
+
+    const actions = document.createElement("div");
+    actions.className = "cabaran-layout-debug-actions";
+
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "cabaran-layout-debug-btn";
+    copyBtn.textContent = "Copy Layout";
+    copyBtn.addEventListener("click", function () {
+      const payload = serializeCabaranOverlayLayoutForCopy();
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(payload).catch(function () {
+          window.prompt("Salin Cabaran layout:", payload);
+        });
+      } else {
+        window.prompt("Salin Cabaran layout:", payload);
+      }
+    });
+
+    const resetBtn = document.createElement("button");
+    resetBtn.type = "button";
+    resetBtn.className = "cabaran-layout-debug-btn";
+    resetBtn.textContent = "Reset Layout";
+    resetBtn.addEventListener("click", function () {
+      resetCabaranLayoutDebug();
+    });
+
+    actions.appendChild(copyBtn);
+    actions.appendChild(resetBtn);
+    panel.appendChild(titleRow);
+    panel.appendChild(info);
+    panel.appendChild(actions);
+    appRoot.appendChild(panel);
+    cabaranLayoutDebugPanelEl = panel;
+
+    const showTab = document.createElement("button");
+    showTab.type = "button";
+    showTab.id = "cabaran-layout-debug-show-tab";
+    showTab.className = "cabaran-layout-debug-show-tab";
+    showTab.textContent = "Show Panel (D)";
+    showTab.addEventListener("click", function () {
+      setCabaranLayoutDebugPanelHidden(false);
+    });
+    appRoot.appendChild(showTab);
+    cabaranLayoutDebugShowTabEl = showTab;
+
+    updateCabaranLayoutDebugInfo();
+    bindCabaranLayoutDebugKeyboard();
+    updateCabaranLayoutDebugPanelVisibility();
+
+    document.addEventListener("pointermove", onCabaranLayoutPointerMove, { passive: false });
+    document.addEventListener("pointerup", endCabaranLayoutDrag);
+    document.addEventListener("pointercancel", endCabaranLayoutDrag);
+    window.addEventListener("resize", positionCabaranLayoutDebugPanel);
+  }
+
+  function applyCabaranDebugMode() {
+    const section = document.getElementById("screen-cabaran");
+
+    if (!section) {
+      return;
+    }
+
+    if (!DEBUG_CABARAN_LAYOUT) {
+      section.classList.remove("debug-cabaran-layout");
+      updateCabaranLayoutDebugPanelVisibility();
+      return;
+    }
+
+    ensureCabaranLayoutDebugUi();
+    section.classList.add("debug-cabaran-layout");
+    updateCabaranLayoutDebugPanelVisibility();
+  }
+
+  function formatCabaranLayoutDebugLabel(name, rect) {
+    return (
+      name +
+      " " +
+      rect.left +
+      "%," +
+      rect.top +
+      "%," +
+      rect.width +
+      "%," +
+      rect.height +
+      "%"
+    );
+  }
+
+  function markCabaranLayoutDebug(el, layoutKey) {
+    if (!el) {
+      return;
+    }
+
+    const rect = getCabaranLayoutRect(layoutKey);
+
+    if (DEBUG_CABARAN_LAYOUT) {
+      el.setAttribute("data-cabaran-overlay", "true");
+      el.dataset.cabaranLayoutKey = layoutKey;
+
+      if (rect) {
+        el.dataset.debugLabel = formatCabaranLayoutDebugLabel(layoutKey, rect);
+      } else {
+        el.dataset.debugLabel = layoutKey;
+      }
+
+      attachCabaranOverlayDebugInteractions(el, layoutKey);
+      return;
+    }
+
+    el.removeAttribute("data-cabaran-overlay");
+    el.removeAttribute("data-debug-label");
+  }
+
+  function markCabaranOverlayDebug(el, layoutKey) {
+    markCabaranLayoutDebug(el, layoutKey);
   }
 
   function applyTulisDebugMode() {
@@ -1856,6 +2648,7 @@
 
     hidePronunciationFeedback(latihanSusunFeedbackEl);
     hideLatihanSusunReinforcement();
+    void markCabaranLearningStep("latihan_susun");
     latihanSusunCompletionOverlayEl.style.display = "flex";
     latihanSusunCompletionOverlayEl.setAttribute("aria-hidden", "false");
   }
@@ -2351,7 +3144,7 @@
     cabaranBtn.addEventListener("click", function (event) {
       event.preventDefault();
       event.stopPropagation();
-      showCabaranComingSoonOnLatihanSusun();
+      startCabaran();
     });
 
     completionActions.appendChild(ulangBtn);
@@ -2443,6 +3236,7 @@
       if (name === "cabaran") {
         cabaranFeedback = createPronunciationFeedbackElement(section);
         cabaranFeedback.id = "cabaran-feedback";
+        setupCabaranScreen(section);
       }
 
       if (name === "tulis") {
@@ -2619,14 +3413,2349 @@
     return previousScreen === "latihan" && isLatihanSusunCheckpointEligible();
   }
 
-  function showCabaranComingSoonOnLatihan() {
-    hideLatihanCompletionOverlay();
-    showLatihanFeedbackMessage(CABARAN_COMING_SOON_MSG, { autoHide: false });
+  function isCabaranChoiceCheckpoint() {
+    return (
+      selectedCheckpoint === "vokal" ||
+      selectedCheckpoint === "konsonan" ||
+      selectedCheckpoint === "suku_kata_kv"
+    );
   }
 
-  function showCabaranComingSoonOnLatihanSusun() {
+  function isCabaranWordCheckpoint() {
+    return (
+      selectedCheckpoint === "perkataan_vkv" ||
+      selectedCheckpoint === "perkataan_kvkv"
+    );
+  }
+
+  function getCabaranSuggestedTP(totalCorrect) {
+    if (totalCorrect >= 10) {
+      return "TP6";
+    }
+
+    if (totalCorrect >= 9) {
+      return "TP5";
+    }
+
+    if (totalCorrect >= 7) {
+      return "TP4";
+    }
+
+    if (totalCorrect >= 5) {
+      return "TP3";
+    }
+
+    if (totalCorrect >= 3) {
+      return "TP2";
+    }
+
+    return "TP1";
+  }
+
+  function getCabaranSchoolCode() {
+    const engine = getAssessmentEngine();
+
+    if (engine && engine.getSchoolCode) {
+      return String(engine.getSchoolCode() || "");
+    }
+
+    return "";
+  }
+
+  function getCabaranStudentSession() {
+    const engine = getAssessmentEngine();
+
+    if (!engine || !engine.getLoggedInStudent) {
+      return null;
+    }
+
+    return engine.getLoggedInStudent();
+  }
+
+  function initCabaranDatabase() {
+    if (cabaranDbPromise) {
+      return cabaranDbPromise;
+    }
+
+    cabaranDbPromise = new Promise(function (resolve, reject) {
+      const request = indexedDB.open(CABARAN_DB_NAME, CABARAN_DB_VERSION);
+
+      request.onupgradeneeded = function (event) {
+        const db = event.target.result;
+
+        if (db.objectStoreNames.contains("cabaran_results")) {
+          db.deleteObjectStore("cabaran_results");
+        }
+
+        if (!db.objectStoreNames.contains(CABARAN_SUMMARIES_STORE)) {
+          db.createObjectStore(CABARAN_SUMMARIES_STORE, {
+            keyPath: "summaryKey",
+          });
+        }
+
+        if (!db.objectStoreNames.contains(CABARAN_LEARNING_UNLOCKS_STORE)) {
+          db.createObjectStore(CABARAN_LEARNING_UNLOCKS_STORE, {
+            keyPath: "unlockKey",
+          });
+        }
+      };
+
+      request.onsuccess = function () {
+        resolve(request.result);
+      };
+
+      request.onerror = function () {
+        reject(request.error || new Error("Cabaran DB gagal dibuka."));
+      };
+    });
+
+    return cabaranDbPromise;
+  }
+
+  function cabaranStorePut(storeName, record) {
+    return initCabaranDatabase().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction(storeName, "readwrite");
+        const store = tx.objectStore(storeName);
+        // IndexedDB put = upsert by keyPath; repeated Cabaran updates the same row.
+        const request = store.put(record);
+
+        request.onsuccess = function () {
+          resolve(request.result);
+        };
+
+        request.onerror = function () {
+          reject(request.error);
+        };
+      });
+    });
+  }
+
+  function cabaranStoreGet(storeName, key) {
+    return initCabaranDatabase().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction(storeName, "readonly");
+        const store = tx.objectStore(storeName);
+        const request = store.get(key);
+
+        request.onsuccess = function () {
+          resolve(request.result || null);
+        };
+
+        request.onerror = function () {
+          reject(request.error);
+        };
+      });
+    });
+  }
+
+  function buildCabaranUnlockKey(session, checkpointId) {
+    return [
+      normalizeCabaranIdentityText(getCabaranSchoolCode()),
+      normalizeCabaranIdentityText(session.classId),
+      normalizeCabaranIdentityText(session.studentId),
+      normalizeCabaranIdentityText(checkpointId),
+    ].join("|");
+  }
+
+  function markCabaranLearningStep(step) {
+    const session = getCabaranStudentSession();
+
+    if (!session || !selectedCheckpoint) {
+      return Promise.resolve();
+    }
+
+    const unlockKey = buildCabaranUnlockKey(session, selectedCheckpoint);
+
+    return cabaranStoreGet(CABARAN_LEARNING_UNLOCKS_STORE, unlockKey).then(
+      function (existing) {
+        const record = existing || {
+          unlockKey: unlockKey,
+          schoolCode: getCabaranSchoolCode(),
+          classId: session.classId,
+          studentId: session.studentId,
+          checkpointId: selectedCheckpoint,
+          belajarComplete: false,
+          latihanChoiceComplete: false,
+          latihanSusunComplete: false,
+        };
+
+        if (step === "belajar") {
+          record.belajarComplete = true;
+        }
+
+        if (step === "latihan_choice") {
+          record.latihanChoiceComplete = true;
+        }
+
+        if (step === "latihan_susun") {
+          record.latihanSusunComplete = true;
+        }
+
+        record.updatedAt = new Date().toISOString();
+        return cabaranStorePut(CABARAN_LEARNING_UNLOCKS_STORE, record);
+      }
+    );
+  }
+
+  function canAccessCabaran() {
+    const session = getCabaranStudentSession();
+
+    if (!session || !selectedCheckpoint) {
+      return Promise.resolve(false);
+    }
+
+    const unlockKey = buildCabaranUnlockKey(session, selectedCheckpoint);
+
+    return cabaranStoreGet(CABARAN_LEARNING_UNLOCKS_STORE, unlockKey).then(
+      function (record) {
+        if (!record || !record.belajarComplete || !record.latihanChoiceComplete) {
+          return false;
+        }
+
+        if (isCabaranWordCheckpoint()) {
+          return !!record.latihanSusunComplete;
+        }
+
+        return true;
+      }
+    );
+  }
+
+  function normalizeCabaranIdentityText(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
+  function getCabaranCompletionTimestamp() {
+    return new Date().toISOString();
+  }
+
+  function buildCabaranSummaryKey(session, checkpointId) {
+    return [
+      normalizeCabaranIdentityText(getCabaranSchoolCode()),
+      normalizeCabaranIdentityText(session.classId),
+      normalizeCabaranIdentityText(session.studentId),
+      normalizeCabaranIdentityText(checkpointId),
+    ].join("|");
+  }
+
+  function buildCabaranSummaryRecord(session, checkpointId, stats) {
+    const schoolCode = String(getCabaranSchoolCode() || "").trim();
+    const summaryKey = buildCabaranSummaryKey(session, checkpointId);
+
+    return {
+      summaryKey: summaryKey,
+      schoolCode: schoolCode,
+      classId: String(session.classId || "").trim(),
+      studentId: String(session.studentId || "").trim(),
+      studentName: String(session.studentName || "").trim(),
+      checkpointId: String(checkpointId || "").trim(),
+      totalCorrect: stats.totalCorrect,
+      totalQuestions: stats.totalQuestions,
+      percentage: stats.percentage,
+      suggestedTP: stats.suggestedTP,
+      cabaranCompleted: true,
+      updatedAt: getCabaranCompletionTimestamp(),
+      syncStatus: "pending",
+      syncMode: CABARAN_SUMMARY_SYNC_MODE,
+      sheetUpsertKey: summaryKey,
+    };
+  }
+
+  function saveCabaranSummary(payload) {
+    const schoolCode = String(payload.schoolCode || getCabaranSchoolCode() || "").trim();
+    const classId = String(payload.classId || "").trim();
+    const studentId = String(payload.studentId || "").trim();
+    const checkpointId = String(payload.checkpointId || "").trim();
+
+    if (!schoolCode || !classId || !studentId || !checkpointId) {
+      return Promise.reject(
+        new Error("Cabaran summary missing identity fields for upsert key.")
+      );
+    }
+
+    const summaryKey = [
+      normalizeCabaranIdentityText(schoolCode),
+      normalizeCabaranIdentityText(classId),
+      normalizeCabaranIdentityText(studentId),
+      normalizeCabaranIdentityText(checkpointId),
+    ].join("|");
+    const updatedAt = getCabaranCompletionTimestamp();
+    const record = {
+      summaryKey: summaryKey,
+      schoolCode: schoolCode,
+      classId: classId,
+      studentId: studentId,
+      studentName: String(payload.studentName || "").trim(),
+      checkpointId: checkpointId,
+      totalCorrect: payload.totalCorrect,
+      totalQuestions: payload.totalQuestions,
+      percentage: payload.percentage,
+      suggestedTP: payload.suggestedTP,
+      cabaranCompleted: payload.cabaranCompleted !== false,
+      updatedAt: updatedAt,
+      syncStatus: payload.syncStatus || "pending",
+      syncMode: CABARAN_SUMMARY_SYNC_MODE,
+      sheetUpsertKey: summaryKey,
+    };
+
+    console.log("[Cabaran] Summary upsert (latest result + timestamp)", {
+      summaryKey: summaryKey,
+      totalCorrect: record.totalCorrect,
+      suggestedTP: record.suggestedTP,
+      updatedAt: updatedAt,
+    });
+
+    return cabaranStorePut(CABARAN_SUMMARIES_STORE, record);
+  }
+
+  function resetCabaranSessionMemory() {
+    cabaranSessionAnswers = [];
+    cabaranCorrectCount = 0;
+  }
+
+  function rememberCabaranAnswer(payload) {
+    const entry = {
+      questionNo: cabaranQuestionNum,
+      targetText: payload.targetText,
+      answer: payload.answer || "",
+      transcript: payload.transcript || "",
+      confidence:
+        payload.confidence !== undefined && payload.confidence !== null
+          ? payload.confidence
+          : "",
+      isCorrect: !!payload.isCorrect,
+    };
+
+    cabaranSessionAnswers.push(entry);
+    console.log("[Cabaran] Answer (memory only)", entry);
+  }
+
+  function applyCabaranOverlayRect(el, rect) {
+    applyLayoutRect(el, rect);
+  }
+
+  function raiseCabaranButtonHotspots() {
+    const section = document.getElementById("screen-cabaran");
+
+    if (!section) {
+      return;
+    }
+
+    CABARAN_BUTTON_LAYOUT_KEYS.forEach(function (key) {
+      const btn = cabaranButtonHotspotEls[key];
+
+      if (btn) {
+        btn.style.zIndex = "25";
+        btn.style.pointerEvents = "auto";
+        section.appendChild(btn);
+      }
+    });
+  }
+
+  function applyCabaranButtonLayout() {
+    CABARAN_BUTTON_LAYOUT_KEYS.forEach(function (key) {
+      const btn = cabaranButtonHotspotEls[key];
+      const rect = CABARAN_BUTTON_LAYOUT[key];
+
+      if (!btn || !rect) {
+        return;
+      }
+
+      applyLayoutRect(btn, rect);
+      btn.style.zIndex = "25";
+      btn.style.pointerEvents = "auto";
+      markCabaranLayoutDebug(btn, key);
+    });
+
+    raiseCabaranButtonHotspots();
+  }
+
+  function createCabaranButtonHotspots(section) {
+    const buttonConfigs = [
+      {
+        key: "exitButton",
+        id: "cabaran_exit",
+        label: "Keluar",
+        action: "cabaran-exit",
+      },
+      {
+        key: "submenuButton",
+        id: "cabaran_submenu",
+        label: "Submenu",
+        action: "cabaran-submenu",
+      },
+      {
+        key: "ulangButton",
+        id: "cabaran_ulang",
+        label: "Ulang",
+        action: "cabaran-ulang",
+      },
+    ];
+
+    buttonConfigs.forEach(function (config) {
+      if (cabaranButtonHotspotEls[config.key]) {
+        return;
+      }
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "hotspot cabaran-button-hotspot";
+      btn.dataset.hotspot = config.id;
+      btn.dataset.action = config.action;
+      btn.setAttribute("aria-label", config.label);
+      btn.style.zIndex = "25";
+      btn.style.pointerEvents = "auto";
+
+      btn.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (DEBUG_CABARAN_LAYOUT) {
+          return;
+        }
+
+        if (config.action === "cabaran-exit") {
+          exitCabaranToHome();
+          return;
+        }
+
+        if (config.action === "cabaran-submenu") {
+          returnToCurrentCheckpointSubmenu();
+          return;
+        }
+
+        if (config.action === "cabaran-ulang") {
+          replayCabaranQuestionAudioOnly();
+        }
+      });
+
+      section.appendChild(btn);
+      cabaranButtonHotspotEls[config.key] = btn;
+    });
+  }
+
+  function applyCabaranOverlayLayout() {
+    const L = CABARAN_OVERLAY_LAYOUT;
+
+    function applyOverlay(layoutKey, el) {
+      if (!el || !L[layoutKey]) {
+        return;
+      }
+
+      applyCabaranOverlayRect(el, L[layoutKey]);
+      el.style.pointerEvents = getCabaranOverlayPointerEvents(layoutKey);
+      markCabaranOverlayDebug(el, layoutKey);
+    }
+
+    applyOverlay("progressBox", cabaranProgressEl);
+    applyOverlay("instructionText", cabaranQuestionEl);
+    applyOverlay("blankQuestion", cabaranBlankQuestionEl);
+    applyOverlay("audioVisual", cabaranAudioVisualEl);
+    applyOverlay("targetWord", cabaranTargetEl);
+    applyOverlay("answerA", cabaranAnswerBtns[0]);
+    applyOverlay("answerB", cabaranAnswerBtns[1]);
+    applyOverlay("answerC", cabaranAnswerBtns[2]);
+    applyOverlay("susunAnswer", cabaranSusunAnswerEl);
+    applyOverlay("susunDrag", cabaranSusunDragEl);
+
+    if (cabaranFeedback && L.feedbackText) {
+      applyOverlay("feedbackText", cabaranFeedback);
+      cabaranFeedback.style.transform = "none";
+      cabaranFeedback.style.maxWidth = "none";
+      cabaranFeedback.style.boxSizing = "border-box";
+      cabaranFeedback.style.display = "flex";
+      cabaranFeedback.style.alignItems = "center";
+      cabaranFeedback.style.justifyContent = "center";
+      cabaranFeedback.style.textAlign = "center";
+      cabaranFeedback.style.background = "transparent";
+    }
+
+    if (cabaranTimerEl && L.timerBox) {
+      applyOverlay("timerBox", cabaranTimerEl);
+      applyCabaranTimerFontSize();
+    }
+
+    applyCabaranButtonLayout();
+    applyCabaranDebugMode();
+    positionCabaranLayoutDebugPanel();
+  }
+
+  function getCabaranTaughtWordPool() {
+    return BELAJAR_CONTENT.perkataan_vkv.concat(BELAJAR_CONTENT.perkataan_kvkv);
+  }
+
+  function getCabaranWordAudioFolder(word) {
+    const w = String(word || "").trim().toLowerCase();
+
+    if (BELAJAR_CONTENT.perkataan_vkv.indexOf(w) >= 0) {
+      return "perkataan_vkv";
+    }
+
+    return "perkataan_kvkv";
+  }
+
+  function getCabaranTaughtSyllablePool() {
+    const seen = {};
+    const items = [];
+
+    SUKU_KATA_KV_LEVELS.forEach(function (level) {
+      level.items.forEach(function (item) {
+        const key = String(item || "").trim().toLowerCase();
+
+        if (key && !seen[key]) {
+          seen[key] = true;
+          items.push(key);
+        }
+      });
+    });
+
+    return items;
+  }
+
+  function buildCabaranVokalBlankRound(word) {
+    const w = String(word || "").trim().toLowerCase();
+    const vowels = BELAJAR_CONTENT.vokal;
+    const vowelPositions = [];
+
+    for (let i = 0; i < w.length; i += 1) {
+      if (vowels.indexOf(w.charAt(i)) >= 0) {
+        vowelPositions.push(i);
+      }
+    }
+
+    if (!vowelPositions.length) {
+      return null;
+    }
+
+    const blankPos = vowelPositions[Math.floor(Math.random() * vowelPositions.length)];
+    const correctAnswer = w.charAt(blankPos);
+    const prefix = w.slice(0, blankPos);
+    const suffix = w.slice(blankPos + 1);
+    const distractors = shuffleArray(
+      vowels.filter(function (v) {
+        return v !== correctAnswer;
+      })
+    ).slice(0, 2);
+    const options = shuffleArray([correctAnswer].concat(distractors));
+
+    return {
+      audioWord: w,
+      audioFolder: getCabaranWordAudioFolder(w),
+      prefix: prefix,
+      suffix: suffix,
+      correctAnswer: correctAnswer,
+      options: options,
+      correctIndex: options.indexOf(correctAnswer),
+    };
+  }
+
+  function buildCabaranKonsonanBlankRound(word) {
+    const w = String(word || "").trim().toLowerCase();
+    const konsonan = BELAJAR_CONTENT.konsonan;
+    const consonantPositions = [];
+
+    for (let i = 0; i < w.length; i += 1) {
+      if (konsonan.indexOf(w.charAt(i)) >= 0) {
+        consonantPositions.push(i);
+      }
+    }
+
+    if (!consonantPositions.length) {
+      return null;
+    }
+
+    const blankPos = consonantPositions[0];
+    const correctAnswer = w.charAt(blankPos);
+    const prefix = w.slice(0, blankPos);
+    const suffix = w.slice(blankPos + 1);
+    const distractors = shuffleArray(
+      konsonan.filter(function (k) {
+        return k !== correctAnswer;
+      })
+    ).slice(0, 2);
+    const options = shuffleArray([correctAnswer].concat(distractors));
+
+    return {
+      audioWord: w,
+      audioFolder: getCabaranWordAudioFolder(w),
+      prefix: prefix,
+      suffix: suffix,
+      correctAnswer: correctAnswer,
+      options: options,
+      correctIndex: options.indexOf(correctAnswer),
+    };
+  }
+
+  function buildCabaranSukuKataBlankRound(word) {
+    const w = String(word || "").trim().toLowerCase();
+    const syllables = splitLatihanSusunSyllables(w);
+
+    if (syllables.length < 2) {
+      return null;
+    }
+
+    const taughtSyllables = getCabaranTaughtSyllablePool();
+    let blankIndex = -1;
+
+    for (let i = syllables.length - 1; i >= 0; i -= 1) {
+      if (taughtSyllables.indexOf(syllables[i]) >= 0) {
+        blankIndex = i;
+        break;
+      }
+    }
+
+    if (blankIndex < 0) {
+      blankIndex = syllables.length - 1;
+    }
+
+    const correctAnswer = syllables[blankIndex];
+    const prefix = syllables.slice(0, blankIndex).join("");
+    const suffix = syllables.slice(blankIndex + 1).join("");
+    const distractors = shuffleArray(
+      taughtSyllables.filter(function (s) {
+        return s !== correctAnswer;
+      })
+    ).slice(0, 2);
+    const options = shuffleArray([correctAnswer].concat(distractors));
+
+    return {
+      audioWord: w,
+      audioFolder: getCabaranWordAudioFolder(w),
+      prefix: prefix,
+      suffix: suffix,
+      correctAnswer: correctAnswer,
+      options: options,
+      correctIndex: options.indexOf(correctAnswer),
+    };
+  }
+
+  function buildCabaranShortSoundBlankRound(word) {
+    if (selectedCheckpoint === "vokal") {
+      return buildCabaranVokalBlankRound(word);
+    }
+
+    if (selectedCheckpoint === "konsonan") {
+      return buildCabaranKonsonanBlankRound(word);
+    }
+
+    return buildCabaranSukuKataBlankRound(word);
+  }
+
+  function buildCabaranKvkvHardBlankRound(word) {
+    const w = String(word || "").trim().toLowerCase();
+    const syllables = splitLatihanSusunSyllables(w);
+
+    if (syllables.length < 2) {
+      return buildCabaranShortSoundBlankRound(w);
+    }
+
+    const blankIndex = syllables.length - 1;
+    const correctAnswer = syllables[blankIndex];
+    const prefix = syllables.slice(0, blankIndex).join("");
+    const suffix = syllables.slice(blankIndex + 1).join("");
+    const taughtSyllables = getCabaranTaughtSyllablePool();
+    const distractors = shuffleArray(
+      taughtSyllables.filter(function (s) {
+        return s !== correctAnswer;
+      })
+    ).slice(0, 2);
+    const options = shuffleArray([correctAnswer].concat(distractors));
+
+    return {
+      audioWord: w,
+      audioFolder: "perkataan_kvkv",
+      prefix: prefix,
+      suffix: suffix,
+      correctAnswer: correctAnswer,
+      options: options,
+      correctIndex: options.indexOf(correctAnswer),
+      difficulty: "hard",
+      showBlank: true,
+    };
+  }
+
+  function buildCabaranEasyChoiceRound(targetItem) {
+    const correctAnswer = String(targetItem || "").trim();
+    const pool = getLatihanPracticePool().filter(function (item) {
+      return String(item) !== correctAnswer;
+    });
+    const distractors = shuffleArray(pool).slice(0, 2);
+    const options = shuffleArray([correctAnswer].concat(distractors));
+
+    return {
+      audioWord: correctAnswer,
+      audioFolder: selectedCheckpoint,
+      difficulty: "easy",
+      showBlank: false,
+      options: options,
+      correctIndex: options.indexOf(correctAnswer),
+    };
+  }
+
+  function buildCabaranMediumBlankRound(word) {
+    const round = buildCabaranShortSoundBlankRound(word);
+
+    if (!round) {
+      return null;
+    }
+
+    round.difficulty = "medium";
+    round.showBlank = true;
+    round.audioFolder = "perkataan_vkv";
+    return round;
+  }
+
+  function buildCabaranVokalFirstLetterRound(word) {
+    const w = String(word || "").trim().toLowerCase();
+    const vowels = BELAJAR_CONTENT.vokal;
+
+    if (!w.length || vowels.indexOf(w.charAt(0)) < 0) {
+      return null;
+    }
+
+    const correctAnswer = w.charAt(0);
+    const distractors = shuffleArray(
+      vowels.filter(function (v) {
+        return v !== correctAnswer;
+      })
+    ).slice(0, 2);
+    const options = shuffleArray([correctAnswer].concat(distractors));
+
+    return {
+      audioWord: w,
+      audioFolder: "perkataan_vkv",
+      prefix: "",
+      suffix: w.slice(1),
+      correctAnswer: correctAnswer,
+      options: options,
+      correctIndex: options.indexOf(correctAnswer),
+      difficulty: "medium",
+      showBlank: true,
+    };
+  }
+
+  function buildCabaranVokalLastLetterRound(syllable) {
+    const w = String(syllable || "").trim().toLowerCase();
+    const vowels = BELAJAR_CONTENT.vokal;
+
+    if (!w.length || vowels.indexOf(w.charAt(w.length - 1)) < 0) {
+      return null;
+    }
+
+    const correctAnswer = w.charAt(w.length - 1);
+    const distractors = shuffleArray(
+      vowels.filter(function (v) {
+        return v !== correctAnswer;
+      })
+    ).slice(0, 2);
+    const options = shuffleArray([correctAnswer].concat(distractors));
+
+    return {
+      audioWord: w,
+      audioFolder: "suku_kata_kv",
+      prefix: w.slice(0, -1),
+      suffix: "",
+      correctAnswer: correctAnswer,
+      options: options,
+      correctIndex: options.indexOf(correctAnswer),
+      difficulty: "hard",
+      showBlank: true,
+    };
+  }
+
+  function buildCabaranVokalQuestionSequence(total) {
+    const vowelItems = buildPracticeSequence(
+      BELAJAR_CONTENT.vokal.slice(),
+      CABARAN_SHORT_EASY_COUNT
+    );
+    const vkvWords = buildPracticeSequence(
+      BELAJAR_CONTENT.perkataan_vkv.slice(),
+      CABARAN_SHORT_MEDIUM_COUNT
+    );
+    const kvSyllables = buildPracticeSequence(
+      getCabaranTaughtSyllablePool(),
+      CABARAN_SHORT_HARD_COUNT
+    );
+    const rounds = [];
+
+    vowelItems.forEach(function (item) {
+      rounds.push(buildCabaranEasyChoiceRound(item));
+    });
+
+    vkvWords.forEach(function (word) {
+      const round = buildCabaranVokalFirstLetterRound(word);
+
+      if (round) {
+        rounds.push(round);
+      }
+    });
+
+    kvSyllables.forEach(function (syllable) {
+      const round = buildCabaranVokalLastLetterRound(syllable);
+
+      if (round) {
+        rounds.push(round);
+      }
+    });
+
+    while (rounds.length < total) {
+      rounds.push(buildCabaranEasyChoiceRound(BELAJAR_CONTENT.vokal[0] || "a"));
+    }
+
+    return rounds.slice(0, total);
+  }
+
+  function buildCabaranShortSoundQuestionSequence(total) {
+    const easyItems = buildPracticeSequence(
+      getLatihanPracticePool(),
+      CABARAN_SHORT_EASY_COUNT
+    );
+    const mediumWords = buildPracticeSequence(
+      BELAJAR_CONTENT.perkataan_vkv.slice(),
+      CABARAN_SHORT_MEDIUM_COUNT
+    );
+    const hardWords = buildPracticeSequence(
+      BELAJAR_CONTENT.perkataan_kvkv.slice(),
+      CABARAN_SHORT_HARD_COUNT
+    );
+    const rounds = [];
+
+    easyItems.forEach(function (item) {
+      rounds.push(buildCabaranEasyChoiceRound(item));
+    });
+
+    mediumWords.forEach(function (word) {
+      const round = buildCabaranMediumBlankRound(word);
+
+      if (round) {
+        rounds.push(round);
+      }
+    });
+
+    hardWords.forEach(function (word) {
+      const round = buildCabaranKvkvHardBlankRound(word);
+
+      if (round) {
+        rounds.push(round);
+      }
+    });
+
+    while (rounds.length < total) {
+      rounds.push(buildCabaranEasyChoiceRound(getLatihanPracticePool()[0] || "a"));
+    }
+
+    return rounds.slice(0, total);
+  }
+
+  function ensureCabaranQuestionPlan(forceNew) {
+    if (
+      !forceNew &&
+      cabaranQuestionItems.length === CABARAN_TOTAL_QUESTIONS
+    ) {
+      return;
+    }
+
+    if (isCabaranChoiceCheckpoint()) {
+      if (selectedCheckpoint === "vokal") {
+        cabaranQuestionItems = buildCabaranVokalQuestionSequence(
+          CABARAN_TOTAL_QUESTIONS
+        );
+      } else {
+        cabaranQuestionItems = buildCabaranShortSoundQuestionSequence(
+          CABARAN_TOTAL_QUESTIONS
+        );
+      }
+      return;
+    }
+
+    const pool = getLatihanPracticePool();
+
+    if (!pool.length) {
+      cabaranQuestionItems = [];
+      return;
+    }
+
+    cabaranQuestionItems = buildPracticeSequence(pool, CABARAN_TOTAL_QUESTIONS).map(
+      function (word) {
+        return {
+          audioWord: String(word || "").trim().toLowerCase(),
+          audioFolder: selectedCheckpoint,
+        };
+      }
+    );
+  }
+
+  function getCabaranCurrentRound() {
+    const index = cabaranQuestionNum - 1;
+
+    if (cabaranQuestionItems[index] != null) {
+      return cabaranQuestionItems[index];
+    }
+
+    return null;
+  }
+
+  function getCabaranTargetItem() {
+    const round = getCabaranCurrentRound();
+
+    if (round && round.audioWord) {
+      return round.audioWord;
+    }
+
+    return "";
+  }
+
+  function renderCabaranBlankQuestion(round) {
+    if (!cabaranBlankQuestionEl) {
+      return;
+    }
+
+    if (cabaranBlankPrefixEl) {
+      cabaranBlankPrefixEl.textContent = round.prefix || "";
+    }
+
+    if (cabaranBlankSuffixEl) {
+      cabaranBlankSuffixEl.textContent = round.suffix || "";
+    }
+
+    cabaranBlankQuestionEl.style.display = "flex";
+  }
+
+  function getCabaranQuestionMode() {
+    if (isCabaranChoiceCheckpoint()) {
+      return "choice";
+    }
+
+    if (cabaranQuestionNum <= 3) {
+      return "sebut";
+    }
+
+    if (cabaranQuestionNum <= 7) {
+      return "choice";
+    }
+
+    return "susun";
+  }
+
+  function getCabaranQuestionInstruction() {
+    const mode = getCabaranQuestionMode();
+
+    if (mode === "sebut") {
+      return "Sebut perkataan ini dengan jelas.";
+    }
+
+    if (mode === "susun") {
+      return "Susun jawapan yang betul.";
+    }
+
+    return "Pilih jawapan yang betul.";
+  }
+
+  function buildCabaranChoiceRound() {
+    if (isCabaranChoiceCheckpoint()) {
+      const round = getCabaranCurrentRound();
+
+      if (round) {
+        return round;
+      }
+    }
+
+    const correctAnswer = getCabaranTargetItem();
+    const pool = getLatihanPracticePool().filter(function (item) {
+      return item !== correctAnswer;
+    });
+    const distractors = shuffleArray(pool).slice(0, 2);
+    const options = shuffleArray([correctAnswer].concat(distractors));
+
+    return {
+      audioWord: correctAnswer,
+      audioFolder: selectedCheckpoint,
+      options: options,
+      correctIndex: options.indexOf(correctAnswer),
+    };
+  }
+
+  function buildCabaranSusunRound() {
+    const target = String(getCabaranTargetItem() || "")
+      .trim()
+      .toLowerCase();
+    const answerOrder = splitLatihanSusunSyllables(target);
+
+    return {
+      target: target,
+      audioTarget: target,
+      answerOrder: answerOrder,
+      dragPieces: shuffleArray(answerOrder.slice()),
+    };
+  }
+
+  function clearCabaranAdvanceTimer() {
+    if (cabaranAdvanceTimer !== null) {
+      window.clearTimeout(cabaranAdvanceTimer);
+      cabaranAdvanceTimer = null;
+    }
+  }
+
+  function clearCabaranCountdownTimer() {
+    if (cabaranCountdownInterval !== null) {
+      window.clearInterval(cabaranCountdownInterval);
+      cabaranCountdownInterval = null;
+    }
+  }
+
+  function getCabaranCountdownDuration() {
+    const mode = getCabaranQuestionMode();
+
+    if (mode === "choice") {
+      return CABARAN_CHOICE_COUNTDOWN_SEC;
+    }
+
+    if (mode === "susun") {
+      return CABARAN_SUSUN_COUNTDOWN_SEC;
+    }
+
+    return 0;
+  }
+
+  function hideCabaranTimer() {
+    if (!cabaranTimerEl) {
+      return;
+    }
+
+    cabaranTimerEl.style.display = "none";
+    cabaranTimerEl.setAttribute("aria-hidden", "true");
+    cabaranTimerEl.classList.remove("cabaran-timer--tick", "cabaran-timer--urgent");
+  }
+
+  function applyCabaranTimerFontSize() {
+    if (!cabaranTimerEl || !CABARAN_OVERLAY_LAYOUT.timerBox) {
+      return;
+    }
+
+    const fontSize = CABARAN_OVERLAY_LAYOUT.timerBox.fontSize;
+
+    if (fontSize == null) {
+      return;
+    }
+
+    if (typeof fontSize === "number") {
+      cabaranTimerEl.style.fontSize =
+        "clamp(1.2rem, " + fontSize + "vmin, 2.8rem)";
+      return;
+    }
+
+    cabaranTimerEl.style.fontSize = String(fontSize);
+  }
+
+  function renderCabaranTimerDisplay(seconds) {
+    if (!cabaranTimerEl) {
+      return;
+    }
+
+    cabaranTimerEl.textContent = String(seconds);
+    cabaranTimerEl.classList.remove("cabaran-timer--tick", "cabaran-timer--urgent");
+    void cabaranTimerEl.offsetWidth;
+    cabaranTimerEl.classList.add(
+      seconds <= 3 ? "cabaran-timer--urgent" : "cabaran-timer--tick"
+    );
+  }
+
+  function showCabaranTimer(seconds) {
+    if (!cabaranTimerEl) {
+      return;
+    }
+
+    cabaranTimerEl.style.display = "flex";
+    cabaranTimerEl.setAttribute("aria-hidden", "false");
+    renderCabaranTimerDisplay(seconds);
+  }
+
+  function startCabaranCountdown() {
+    clearCabaranCountdownTimer();
+
+    const duration = getCabaranCountdownDuration();
+
+    if (!duration) {
+      hideCabaranTimer();
+      return;
+    }
+
+    cabaranCountdownSeconds = duration;
+    showCabaranTimer(cabaranCountdownSeconds);
+
+    cabaranCountdownInterval = window.setInterval(function () {
+      if (activeScreen !== "cabaran" || cabaranQuestionLocked || cabaranBusy) {
+        clearCabaranCountdownTimer();
+        return;
+      }
+
+      cabaranCountdownSeconds -= 1;
+
+      if (cabaranCountdownSeconds <= 0) {
+        clearCabaranCountdownTimer();
+        handleCabaranQuestionTimeout();
+        return;
+      }
+
+      showCabaranTimer(cabaranCountdownSeconds);
+    }, 1000);
+  }
+
+  function handleCabaranQuestionTimeout() {
+    if (
+      cabaranQuestionLocked ||
+      cabaranBusy ||
+      cabaranQuestionNum > CABARAN_TOTAL_QUESTIONS
+    ) {
+      return;
+    }
+
+    const mode = getCabaranQuestionMode();
+
+    if (mode !== "choice" && mode !== "susun") {
+      return;
+    }
+
+    cabaranQuestionLocked = true;
+    const targetText = getCabaranTargetItem();
+
+    showCabaranFeedbackMessage(CABARAN_WRONG_FEEDBACK);
+
+    if (mode === "choice") {
+      cabaranAnswerBtns.forEach(function (btn) {
+        btn.disabled = true;
+      });
+
+      rememberCabaranAnswer({
+        targetText: targetText,
+        answer: "",
+        transcript: "",
+        confidence: "",
+        isCorrect: false,
+      });
+    } else {
+      rememberCabaranAnswer({
+        targetText: targetText,
+        answer: getCabaranSusunPlacedOrder().join(""),
+        transcript: "",
+        confidence: "",
+        isCorrect: false,
+      });
+    }
+
+    scheduleCabaranAdvance();
+  }
+
+  function updateCabaranProgress() {
+    if (!cabaranProgressEl) {
+      return;
+    }
+
+    const mission = Math.min(cabaranQuestionNum, CABARAN_TOTAL_QUESTIONS);
+    cabaranProgressEl.textContent = "Soalan " + mission + " / 10";
+  }
+
+  function hideCabaranSummaryOverlay() {
+    if (!cabaranSummaryOverlayEl) {
+      return;
+    }
+
+    cabaranSummaryOverlayEl.style.display = "none";
+    cabaranSummaryOverlayEl.setAttribute("aria-hidden", "true");
+  }
+
+  function showCabaranSummaryOverlay(summary) {
+    if (!cabaranSummaryOverlayEl) {
+      return;
+    }
+
+    const title = cabaranSummaryOverlayEl.querySelector("#cabaran-summary-title");
+    const body = cabaranSummaryOverlayEl.querySelector("#cabaran-summary-body");
+
+    if (title) {
+      title.textContent = "Tahniah 🎉";
+    }
+
+    if (body) {
+      body.textContent =
+        "Betul: " +
+        summary.totalCorrect +
+        "/" +
+        summary.totalQuestions +
+        "\nPeratus: " +
+        summary.percentage +
+        "%\nCadangan:\n" +
+        summary.suggestedTP +
+        "\n\nKeputusan disimpan";
+    }
+
+    cabaranSummaryOverlayEl.style.display = "flex";
+    cabaranSummaryOverlayEl.setAttribute("aria-hidden", "false");
+  }
+
+  function finishCabaranSession() {
+    const session = getCabaranStudentSession();
+    const totalQuestions = CABARAN_TOTAL_QUESTIONS;
+    const percentage = Math.round((cabaranCorrectCount / totalQuestions) * 100);
+    const suggestedTP = getCabaranSuggestedTP(cabaranCorrectCount);
+
+    if (!session || !selectedCheckpoint) {
+      console.warn("[Cabaran] Cannot upsert summary without student session/checkpoint");
+      cabaranBusy = false;
+      return;
+    }
+
+    const summary = buildCabaranSummaryRecord(session, selectedCheckpoint, {
+      totalCorrect: cabaranCorrectCount,
+      totalQuestions: totalQuestions,
+      percentage: percentage,
+      suggestedTP: suggestedTP,
+    });
+
+    console.log("[Cabaran] Session answers (memory only)", cabaranSessionAnswers);
+
+    void saveCabaranSummary(summary).catch(function (error) {
+      console.warn("[Cabaran] Summary upsert error", error);
+    });
+
+    clearCabaranCountdownTimer();
+    hideCabaranTimer();
+    showCabaranSummaryOverlay(summary);
+    cabaranBusy = false;
+  }
+
+  function openNextCabaranQuestion() {
+    clearCabaranAdvanceTimer();
+    clearCabaranCountdownTimer();
+    clearCabaranFeedback();
+
+    if (cabaranQuestionNum >= CABARAN_TOTAL_QUESTIONS) {
+      finishCabaranSession();
+      return;
+    }
+
+    cabaranQuestionNum += 1;
+    cabaranQuestionLocked = false;
+    renderCabaranRound();
+  }
+
+  function scheduleCabaranAdvance() {
+    clearCabaranAdvanceTimer();
+    cabaranAdvanceTimer = window.setTimeout(function () {
+      cabaranAdvanceTimer = null;
+      openNextCabaranQuestion();
+    }, 1400);
+  }
+
+  function clearCabaranFeedback() {
+    clearPronunciationFeedbackTimer();
+
+    if (!cabaranFeedback) {
+      return;
+    }
+
+    cabaranFeedback.classList.remove(
+      "cabaran-feedback--correct",
+      "cabaran-feedback--wrong"
+    );
+    cabaranFeedback.style.animation = "none";
+    cabaranFeedback.textContent = "";
+    cabaranFeedback.style.opacity = "0";
+  }
+
+  function showCabaranFeedbackMessage(message) {
+    if (cabaranFeedback) {
+      cabaranFeedback.style.whiteSpace = "pre-line";
+      cabaranFeedback.style.textAlign = "center";
+      cabaranFeedback.classList.remove(
+        "cabaran-feedback--correct",
+        "cabaran-feedback--wrong"
+      );
+      cabaranFeedback.style.animation = "none";
+    }
+
+    showPronunciationFeedbackMessage(cabaranFeedback, message);
+
+    if (cabaranFeedback) {
+      const text = String(message || "");
+
+      if (text.indexOf(CABARAN_CORRECT_FEEDBACK) === 0) {
+        void cabaranFeedback.offsetWidth;
+        cabaranFeedback.style.animation = "";
+        cabaranFeedback.classList.add("cabaran-feedback--correct");
+      } else if (text.indexOf(CABARAN_WRONG_FEEDBACK) === 0) {
+        void cabaranFeedback.offsetWidth;
+        cabaranFeedback.style.animation = "";
+        cabaranFeedback.classList.add("cabaran-feedback--wrong");
+      }
+    }
+  }
+
+  function playCabaranTargetAudio(onFinish) {
+    const round = getCabaranCurrentRound();
+    const target = getCabaranTargetItem();
+    const finish =
+      typeof onFinish === "function"
+        ? onFinish
+        : function () {};
+
+    if (!target) {
+      finish();
+      return;
+    }
+
+    stopBelajarAudio();
+    clearCabaranFeedback();
+
+    let audioPath;
+
+    if (round && round.audioFolder) {
+      audioPath = "audio/" + round.audioFolder + "/" + target + ".mp3";
+    } else if (isBelajarAudioCheckpoint()) {
+      audioPath = getBelajarAudioPath(target);
+    } else {
+      finish();
+      return;
+    }
+    const generation = belajarAudioGeneration;
+    const audio = new Audio(audioPath);
+
+    belajarAudio = audio;
+
+    audio.addEventListener("ended", function () {
+      if (generation === belajarAudioGeneration) {
+        belajarAudio = null;
+      }
+
+      finish();
+    });
+
+    audio.addEventListener("error", function () {
+      if (generation === belajarAudioGeneration) {
+        belajarAudio = null;
+      }
+
+      finish();
+    });
+
+    audio.play().catch(function () {
+      finish();
+    });
+  }
+
+  function stopCabaranRecognition() {
+    if (!cabaranActiveRecognition) {
+      return;
+    }
+
+    try {
+      cabaranActiveRecognition.stop();
+    } catch (error) {
+      // Ignore.
+    }
+
+    cabaranActiveRecognition = null;
+  }
+
+  function listenCabaranMalaySpeech(timeoutMs) {
+    const engine = getAssessmentEngine();
+    const SpeechRecognition =
+      engine && engine.getSpeechRecognitionConstructor
+        ? engine.getSpeechRecognitionConstructor()
+        : window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      return Promise.reject(
+        new Error("Pengecaman suara tidak disokong. Guna Chrome.")
+      );
+    }
+
+    return new Promise(function (resolve) {
+      let settled = false;
+      let bestTranscript = "";
+      let bestConfidence = null;
+      const alternatives = [];
+      const recognition = new SpeechRecognition();
+
+      cabaranActiveRecognition = recognition;
+      recognition.lang = "ms-MY";
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      try {
+        recognition.maxAlternatives = 3;
+      } catch (maxAltError) {
+        // Ignore.
+      }
+
+      function finish(result) {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        window.clearTimeout(timer);
+        cabaranActiveRecognition = null;
+        recognition.onresult = null;
+        recognition.onerror = null;
+        recognition.onend = null;
+
+        try {
+          recognition.stop();
+        } catch (error) {
+          // Ignore.
+        }
+
+        resolve(result);
+      }
+
+      recognition.onresult = function (event) {
+        let i;
+        let j;
+        let row;
+        let alt;
+        let altCount;
+
+        for (i = event.resultIndex; i < event.results.length; i += 1) {
+          row = event.results[i];
+
+          if (!row.isFinal) {
+            continue;
+          }
+
+          altCount = typeof row.length === "number" ? row.length : 1;
+
+          for (j = 0; j < altCount; j += 1) {
+            alt = row[j];
+
+            if (!alt || !alt.transcript) {
+              continue;
+            }
+
+            alternatives.push({
+              transcript: String(alt.transcript).trim(),
+              confidence:
+                typeof alt.confidence === "number" ? alt.confidence : null,
+            });
+          }
+        }
+
+        if (alternatives.length) {
+          bestTranscript = alternatives[0].transcript;
+          bestConfidence = alternatives[0].confidence;
+        }
+      };
+
+      recognition.onerror = function (event) {
+        finish({
+          timedOut: false,
+          failed: true,
+          error: event.error,
+          transcript: bestTranscript,
+          confidence: bestConfidence,
+          alternatives: alternatives.slice(),
+        });
+      };
+
+      recognition.onend = function () {
+        finish({
+          timedOut: false,
+          failed: false,
+          transcript: bestTranscript,
+          confidence: bestConfidence,
+          alternatives: alternatives.slice(),
+        });
+      };
+
+      const timer = window.setTimeout(function () {
+        finish({
+          timedOut: true,
+          failed: true,
+          transcript: bestTranscript,
+          confidence: bestConfidence,
+          alternatives: alternatives.slice(),
+        });
+      }, timeoutMs);
+
+      try {
+        recognition.start();
+      } catch (startError) {
+        finish({
+          timedOut: false,
+          failed: true,
+          error: String(startError),
+          transcript: "",
+          confidence: null,
+          alternatives: [],
+        });
+      }
+    });
+  }
+
+  async function runCabaranWordSpeechCheck(targetText) {
+    const engine = getAssessmentEngine();
+
+    if (!engine || !engine.evaluateWordModeSpeech) {
+      return { ok: false, apiUnavailable: true, reasonKey: "no_engine" };
+    }
+
+    if (engine.isSpeechRecognitionAvailable && !engine.isSpeechRecognitionAvailable()) {
+      return { ok: false, apiUnavailable: true, reasonKey: "no_speech_api" };
+    }
+
+    if (engine.stopActiveSession) {
+      engine.stopActiveSession();
+    }
+
+    stopCabaranRecognition();
+
+    let speech;
+
+    try {
+      speech = await listenCabaranMalaySpeech(CABARAN_SPEECH_TIMEOUT_MS);
+    } catch (listenError) {
+      return {
+        ok: false,
+        apiUnavailable: true,
+        reasonKey: "speech_rejected",
+        message: String(listenError && listenError.message ? listenError.message : listenError),
+      };
+    }
+
+    if (engine.isGoogleSpeechApiFailure && engine.isGoogleSpeechApiFailure(speech)) {
+      return {
+        ok: false,
+        apiUnavailable: true,
+        reasonKey: String(speech.error || "speech_error"),
+      };
+    }
+
+    const evaluation = engine.evaluateWordModeSpeech(targetText, speech);
+    const transcript = String(
+      evaluation.transcript || speech.transcript || ""
+    ).trim();
+
+    console.log("[Cabaran] Google speech", {
+      targetText: targetText,
+      transcript: transcript,
+      confidence: evaluation.confidence,
+      pass: evaluation.pass,
+      failReason: evaluation.failReason,
+    });
+
+    return {
+      ok: true,
+      isCorrect: !!evaluation.pass,
+      transcript: transcript,
+      confidence: evaluation.confidence,
+      failReason: evaluation.failReason || null,
+      aiResult: evaluation.aiResult,
+    };
+  }
+
+  function setCabaranModeUi(mode) {
+    const isChoice = mode === "choice";
+    const isSebut = mode === "sebut";
+    const isSusun = mode === "susun";
+    const round = getCabaranCurrentRound();
+    const showBlank =
+      isChoice && isCabaranChoiceCheckpoint() && round && round.showBlank;
+    const showAudioVisual =
+      isChoice && isCabaranChoiceCheckpoint() && round && !round.showBlank;
+
+    cabaranAnswerBtns.forEach(function (btn) {
+      btn.style.display = isChoice ? "flex" : "none";
+    });
+
+    if (cabaranBlankQuestionEl) {
+      cabaranBlankQuestionEl.style.display = showBlank ? "flex" : "none";
+    }
+
+    if (cabaranAudioVisualEl) {
+      cabaranAudioVisualEl.style.display = showAudioVisual ? "flex" : "none";
+    }
+
+    if (cabaranTargetEl) {
+      cabaranTargetEl.style.display = isSebut ? "flex" : "none";
+    }
+
+    if (cabaranSusunAnswerEl) {
+      cabaranSusunAnswerEl.style.display = isSusun ? "flex" : "none";
+    }
+
+    if (cabaranSusunDragEl) {
+      cabaranSusunDragEl.style.display = isSusun ? "flex" : "none";
+    }
+  }
+
+  function getCabaranSusunPlacedOrder() {
+    const order = [];
+
+    cabaranSusunSlotEls.forEach(function (slot) {
+      const chip = slot.querySelector(".latihan-susun-chip");
+
+      if (chip) {
+        order.push(chip.dataset.pieceText || chip.textContent.trim());
+      } else {
+        order.push("");
+      }
+    });
+
+    return order;
+  }
+
+  function isCabaranSusunAnswerComplete() {
+    const order = getCabaranSusunPlacedOrder();
+
+    return (
+      cabaranSusunCurrentRound &&
+      order.length === cabaranSusunCurrentRound.answerOrder.length &&
+      order.every(function (text) {
+        return !!text;
+      })
+    );
+  }
+
+  function isCabaranSusunPlacedAnswerCorrect() {
+    if (!cabaranSusunCurrentRound || !isCabaranSusunAnswerComplete()) {
+      return false;
+    }
+
+    const placed = getCabaranSusunPlacedOrder();
+    const expected = cabaranSusunCurrentRound.answerOrder;
+
+    for (let i = 0; i < expected.length; i += 1) {
+      if (placed[i] !== expected[i]) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function returnCabaranChipToDragPool(chipEl) {
+    if (!cabaranSusunDragEl || !chipEl) {
+      return;
+    }
+
+    cabaranSusunDragEl.appendChild(chipEl);
+    chipEl.classList.remove("is-in-slot");
+  }
+
+  function placeCabaranChipInSlot(chipEl, slotEl) {
+    const existing = slotEl.querySelector(".latihan-susun-chip");
+
+    if (existing && existing !== chipEl) {
+      returnCabaranChipToDragPool(existing);
+    }
+
+    slotEl.appendChild(chipEl);
+    chipEl.classList.add("is-in-slot");
+  }
+
+  function onCabaranSusunPointerMove(event) {
+    if (!cabaranSusunPointerDrag) {
+      return;
+    }
+
+    cabaranSusunPointerDrag.el.style.left =
+      event.clientX - cabaranSusunPointerDrag.offsetX + "px";
+    cabaranSusunPointerDrag.el.style.top =
+      event.clientY - cabaranSusunPointerDrag.offsetY + "px";
+  }
+
+  function endCabaranSusunPointerDrag(event) {
+    if (!cabaranSusunPointerDrag) {
+      return;
+    }
+
+    const drag = cabaranSusunPointerDrag;
+    cabaranSusunPointerDrag = null;
+
+    drag.el.classList.remove("is-dragging");
+    drag.el.style.position = "";
+    drag.el.style.left = "";
+    drag.el.style.top = "";
+    drag.el.style.zIndex = "";
+
+    let dropped = false;
+
+    cabaranSusunSlotEls.forEach(function (slot) {
+      if (dropped) {
+        return;
+      }
+
+      const rect = slot.getBoundingClientRect();
+
+      if (
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom
+      ) {
+        placeCabaranChipInSlot(drag.el, slot);
+        dropped = true;
+      }
+    });
+
+    if (!dropped) {
+      if (drag.fromSlot) {
+        placeCabaranChipInSlot(drag.el, drag.fromSlot);
+      } else {
+        returnCabaranChipToDragPool(drag.el);
+      }
+    }
+
+    if (!cabaranQuestionLocked && isCabaranSusunAnswerComplete()) {
+      submitCabaranSusunAnswer();
+    }
+  }
+
+  function bindCabaranSusunChip(chipEl) {
+    chipEl.addEventListener("pointerdown", function (event) {
+      if (cabaranQuestionLocked || cabaranBusy) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const rect = chipEl.getBoundingClientRect();
+      const fromSlot = chipEl.closest(".latihan-susun-slot");
+
+      cabaranSusunPointerDrag = {
+        el: chipEl,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top,
+        fromSlot: fromSlot,
+      };
+
+      chipEl.classList.add("is-dragging");
+      chipEl.style.position = "fixed";
+      chipEl.style.zIndex = "10050";
+      chipEl.style.left = rect.left + "px";
+      chipEl.style.top = rect.top + "px";
+
+      if (chipEl.setPointerCapture) {
+        chipEl.setPointerCapture(event.pointerId);
+      }
+    });
+
+    chipEl.addEventListener("pointermove", onCabaranSusunPointerMove);
+    chipEl.addEventListener("pointerup", endCabaranSusunPointerDrag);
+    chipEl.addEventListener("pointercancel", endCabaranSusunPointerDrag);
+  }
+
+  function renderCabaranSusunBoard(round) {
+    cabaranSusunCurrentRound = round;
+    cabaranSusunSlotEls = [];
+    cabaranSusunChipEls = [];
+
+    if (!cabaranSusunAnswerEl || !cabaranSusunDragEl) {
+      return;
+    }
+
+    cabaranSusunAnswerEl.innerHTML = "";
+    cabaranSusunDragEl.innerHTML = "";
+
+    round.answerOrder.forEach(function (_, index) {
+      const slot = document.createElement("div");
+      slot.className = "latihan-susun-slot";
+      slot.dataset.slotIndex = String(index);
+      cabaranSusunAnswerEl.appendChild(slot);
+      cabaranSusunSlotEls.push(slot);
+    });
+
+    round.dragPieces.forEach(function (piece, index) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "latihan-susun-chip";
+      chip.textContent = piece;
+      chip.dataset.pieceText = piece;
+      chip.dataset.chipIndex = String(index);
+      bindCabaranSusunChip(chip);
+      cabaranSusunDragEl.appendChild(chip);
+      cabaranSusunChipEls.push(chip);
+    });
+  }
+
+  function submitCabaranSusunAnswer() {
+    if (cabaranQuestionLocked || cabaranBusy || !cabaranSusunCurrentRound) {
+      return;
+    }
+
+    if (!isCabaranSusunAnswerComplete()) {
+      return;
+    }
+
+    clearCabaranCountdownTimer();
+    cabaranQuestionLocked = true;
+    const isCorrect = isCabaranSusunPlacedAnswerCorrect();
+    const targetText = getCabaranTargetItem();
+
+    if (isCorrect) {
+      cabaranCorrectCount += 1;
+      showCabaranFeedbackMessage(CABARAN_CORRECT_FEEDBACK);
+    } else {
+      showCabaranFeedbackMessage(CABARAN_WRONG_FEEDBACK);
+    }
+
+    rememberCabaranAnswer({
+      targetText: targetText,
+      answer: getCabaranSusunPlacedOrder().join(""),
+      transcript: "",
+      confidence: "",
+      isCorrect: isCorrect,
+    });
+    scheduleCabaranAdvance();
+  }
+
+  function renderCabaranChoiceRound() {
+    const round = buildCabaranChoiceRound();
+    cabaranChoiceCorrectIndex = round.correctIndex;
+    cabaranQuestionLocked = false;
+
+    if (cabaranQuestionEl) {
+      cabaranQuestionEl.textContent = getCabaranQuestionInstruction();
+    }
+
+    if (isCabaranChoiceCheckpoint()) {
+      if (round && round.showBlank) {
+        renderCabaranBlankQuestion(round);
+      } else if (cabaranBlankQuestionEl) {
+        cabaranBlankQuestionEl.style.display = "none";
+      }
+    } else if (cabaranBlankQuestionEl) {
+      cabaranBlankQuestionEl.style.display = "none";
+    }
+
+    cabaranAnswerBtns.forEach(function (btn, index) {
+      btn.textContent = round.options[index] || "";
+      btn.disabled = false;
+      btn.style.opacity = "1";
+    });
+
+    setCabaranModeUi("choice");
+    applyCabaranOverlayLayout();
+    playCabaranTargetAudio();
+    startCabaranCountdown();
+  }
+
+  function renderCabaranSebutRound() {
+    const target = getCabaranTargetItem();
+    cabaranQuestionLocked = false;
+
+    if (cabaranQuestionEl) {
+      cabaranQuestionEl.textContent = getCabaranQuestionInstruction();
+    }
+
+    if (cabaranTargetEl) {
+      cabaranTargetEl.textContent = target;
+    }
+
+    setCabaranModeUi("sebut");
+    applyCabaranOverlayLayout();
+    clearCabaranCountdownTimer();
+    hideCabaranTimer();
+    playCabaranTargetAudio(function () {
+      void runCabaranSebutAuto();
+    });
+  }
+
+  function renderCabaranSusunRound() {
+    const round = buildCabaranSusunRound();
+    cabaranQuestionLocked = false;
+
+    if (cabaranQuestionEl) {
+      cabaranQuestionEl.textContent = getCabaranQuestionInstruction();
+    }
+
+    renderCabaranSusunBoard(round);
+    setCabaranModeUi("susun");
+    applyCabaranOverlayLayout();
+    playCabaranTargetAudio();
+    startCabaranCountdown();
+  }
+
+  function renderCabaranRound() {
+    if (!cabaranZoneEl) {
+      return;
+    }
+
+    hideCabaranSummaryOverlay();
+    updateCabaranProgress();
+    clearCabaranCountdownTimer();
+    clearCabaranFeedback();
+    cabaranSusunPointerDrag = null;
+
+    const mode = getCabaranQuestionMode();
+
+    if (mode === "choice") {
+      renderCabaranChoiceRound();
+      return;
+    }
+
+    if (mode === "sebut") {
+      renderCabaranSebutRound();
+      return;
+    }
+
+    renderCabaranSusunRound();
+  }
+
+  function replayCabaranCurrentQuestion() {
+    if (cabaranBusy || cabaranQuestionNum > CABARAN_TOTAL_QUESTIONS) {
+      return;
+    }
+
+    clearCabaranAdvanceTimer();
+    stopCabaranRecognition();
+    clearCabaranFeedback();
+
+    const mode = getCabaranQuestionMode();
+
+    if (mode === "choice") {
+      cabaranQuestionLocked = false;
+      playCabaranTargetAudio();
+      return;
+    }
+
+    if (mode === "sebut") {
+      cabaranQuestionLocked = false;
+      cabaranBusy = false;
+      playCabaranTargetAudio(function () {
+        void runCabaranSebutAuto();
+      });
+      return;
+    }
+
+    playCabaranTargetAudio();
+  }
+
+  function handleCabaranChoiceAnswer(index) {
+    if (
+      cabaranQuestionLocked ||
+      cabaranBusy ||
+      !cabaranAnswerBtns.length ||
+      index < 0 ||
+      index >= cabaranAnswerBtns.length
+    ) {
+      return;
+    }
+
+    clearCabaranCountdownTimer();
+    cabaranQuestionLocked = true;
+    const isCorrect = index === cabaranChoiceCorrectIndex;
+    const targetText = getCabaranTargetItem();
+    const answer = cabaranAnswerBtns[index]
+      ? cabaranAnswerBtns[index].textContent
+      : "";
+
+    if (isCorrect) {
+      cabaranCorrectCount += 1;
+      showCabaranFeedbackMessage(CABARAN_CORRECT_FEEDBACK);
+    } else {
+      showCabaranFeedbackMessage(CABARAN_WRONG_FEEDBACK);
+    }
+
+    cabaranAnswerBtns.forEach(function (btn, btnIndex) {
+      btn.disabled = true;
+
+      if (btnIndex === cabaranChoiceCorrectIndex) {
+        btn.style.opacity = "1";
+      } else if (btnIndex === index && !isCorrect) {
+        btn.style.opacity = "0.55";
+      }
+    });
+
+    rememberCabaranAnswer({
+      targetText: targetText,
+      answer: answer,
+      transcript: "",
+      confidence: "",
+      isCorrect: isCorrect,
+    });
+    scheduleCabaranAdvance();
+  }
+
+  async function runCabaranSebutAuto() {
+    if (cabaranQuestionLocked || cabaranBusy || getCabaranQuestionMode() !== "sebut") {
+      return;
+    }
+
+    const session = getCabaranStudentSession();
+
+    if (!session) {
+      window.alert("Sila log masuk: Pilih Kelas dan Nama Anda.");
+      return;
+    }
+
+    const targetText = getCabaranTargetItem();
+
+    if (!targetText) {
+      return;
+    }
+
+    cabaranBusy = true;
+    cabaranQuestionLocked = true;
+
+    const result = await runCabaranWordSpeechCheck(targetText);
+
+    if (activeScreen !== "cabaran") {
+      cabaranBusy = false;
+      return;
+    }
+
+    if (!result.ok) {
+      showCabaranFeedbackMessage("Google tidak dapat mendengar dengan jelas.");
+      rememberCabaranAnswer({
+        targetText: targetText,
+        answer: "",
+        transcript: "",
+        confidence: "",
+        isCorrect: false,
+      });
+      cabaranBusy = false;
+      scheduleCabaranAdvance();
+      return;
+    }
+
+    const heard = String(result.transcript || "").trim();
+    const isCorrect = !!result.isCorrect;
+
+    if (isCorrect) {
+      cabaranCorrectCount += 1;
+      showCabaranFeedbackMessage(
+        CABARAN_CORRECT_FEEDBACK + "\nGoogle dengar: " + (heard || "(kosong)")
+      );
+    } else if (!heard) {
+      showCabaranFeedbackMessage("Google tidak dapat mendengar dengan jelas.");
+    } else {
+      showCabaranFeedbackMessage(
+        CABARAN_WRONG_FEEDBACK + "\nGoogle dengar: " + heard
+      );
+    }
+
+    rememberCabaranAnswer({
+      targetText: targetText,
+      answer: heard,
+      transcript: heard,
+      confidence: result.confidence,
+      isCorrect: isCorrect,
+    });
+    cabaranBusy = false;
+    scheduleCabaranAdvance();
+  }
+
+  function setupCabaranScreen(section) {
+    createCabaranButtonHotspots(section);
+
+    cabaranProgressEl = document.createElement("p");
+    cabaranProgressEl.id = "cabaran-progress";
+    cabaranProgressEl.setAttribute("aria-live", "polite");
+    cabaranProgressEl.style.cssText =
+      "position:absolute;margin:0;padding:0.2em 0;text-align:center;font-family:" +
+      BELAJAR_FONT +
+      ";font-size:clamp(0.9rem,3.2vmin,1.1rem);font-weight:700;color:#2a1f14;" +
+      "background:rgba(255,252,240,0.72);border-radius:12px;" +
+      "box-shadow:0 0 10px rgba(255,220,120,0.75);pointer-events:none;z-index:9;" +
+      "box-sizing:border-box;display:flex;align-items:center;justify-content:center;";
+
+    cabaranTimerEl = document.createElement("p");
+    cabaranTimerEl.id = "cabaran-timer";
+    cabaranTimerEl.setAttribute("aria-live", "off");
+    cabaranTimerEl.setAttribute("aria-hidden", "true");
+    cabaranTimerEl.style.cssText =
+      "position:absolute;margin:0;display:none;align-items:center;justify-content:center;" +
+      "text-align:center;font-family:" +
+      BELAJAR_FONT +
+      ";font-weight:800;color:#2a1f14;line-height:1;" +
+      "background:transparent;pointer-events:none;z-index:11;box-sizing:border-box;";
+
+    cabaranQuestionEl = document.createElement("p");
+    cabaranQuestionEl.id = "cabaran-question";
+    cabaranQuestionEl.setAttribute("aria-live", "polite");
+    cabaranQuestionEl.style.cssText =
+      "position:absolute;margin:0;text-align:center;font-family:" +
+      BELAJAR_FONT +
+      ";font-size:clamp(0.95rem,3.5vmin,1.15rem);font-weight:700;color:#2a1f14;" +
+      "background:transparent;box-sizing:border-box;pointer-events:none;z-index:9;" +
+      "display:flex;align-items:center;justify-content:center;";
+
+    cabaranAudioVisualEl = document.createElement("div");
+    cabaranAudioVisualEl.id = "cabaran-audio-visual";
+    cabaranAudioVisualEl.setAttribute("aria-hidden", "true");
+    cabaranAudioVisualEl.style.cssText =
+      "position:absolute;display:none;align-items:center;justify-content:center;" +
+      "font-family:" +
+      BELAJAR_FONT +
+      ";font-size:clamp(1.6rem,6vmin,2.4rem);font-weight:700;color:#2a1f14;" +
+      "background:transparent;pointer-events:none;z-index:9;box-sizing:border-box;";
+    cabaranAudioVisualEl.textContent = "🔊";
+
+    cabaranBlankQuestionEl = document.createElement("div");
+    cabaranBlankQuestionEl.id = "cabaran-blank-question";
+    cabaranBlankQuestionEl.setAttribute("aria-live", "polite");
+    cabaranBlankQuestionEl.style.cssText =
+      "position:absolute;display:none;align-items:center;justify-content:center;" +
+      "gap:0.35em;flex-wrap:wrap;font-family:" +
+      BELAJAR_FONT +
+      ";font-size:clamp(2rem,8vmin,3.4rem);font-weight:700;color:#2a1f14;" +
+      "background:transparent;pointer-events:none;z-index:9;box-sizing:border-box;";
+
+    cabaranBlankPrefixEl = document.createElement("span");
+    cabaranBlankPrefixEl.className = "cabaran-blank-prefix";
+
+    cabaranBlankSlotEl = document.createElement("span");
+    cabaranBlankSlotEl.className = "cabaran-blank-slot";
+    cabaranBlankSlotEl.setAttribute("aria-hidden", "true");
+    cabaranBlankSlotEl.style.cssText =
+      "display:inline-flex;align-items:center;justify-content:center;" +
+      "min-width:1.2em;min-height:1.2em;padding:0.1em 0.3em;" +
+      "border:3px dashed #5c4a32;border-radius:12px;" +
+      "background:rgba(255,255,255,0.55);box-shadow:inset 0 0 6px rgba(255,220,120,0.25);";
+
+    cabaranBlankSuffixEl = document.createElement("span");
+    cabaranBlankSuffixEl.className = "cabaran-blank-suffix";
+
+    cabaranBlankQuestionEl.appendChild(cabaranBlankPrefixEl);
+    cabaranBlankQuestionEl.appendChild(cabaranBlankSlotEl);
+    cabaranBlankQuestionEl.appendChild(cabaranBlankSuffixEl);
+
+    cabaranTargetEl = document.createElement("p");
+    cabaranTargetEl.id = "cabaran-target";
+    cabaranTargetEl.setAttribute("aria-live", "polite");
+    cabaranTargetEl.style.cssText =
+      "position:absolute;margin:0;text-align:center;font-family:" +
+      BELAJAR_FONT +
+      ";font-size:clamp(2rem,8vmin,3.4rem);font-weight:700;color:#2a1f14;line-height:1;" +
+      "background:transparent;box-sizing:border-box;pointer-events:none;z-index:9;" +
+      "display:none;align-items:center;justify-content:center;";
+
+    cabaranSusunAnswerEl = document.createElement("div");
+    cabaranSusunAnswerEl.id = "cabaran-susun-answer";
+    cabaranSusunAnswerEl.style.cssText =
+      "position:absolute;display:none;justify-content:center;gap:0.45em;flex-wrap:wrap;" +
+      "box-sizing:border-box;pointer-events:auto;z-index:9;";
+
+    cabaranSusunDragEl = document.createElement("div");
+    cabaranSusunDragEl.id = "cabaran-susun-drag";
+    cabaranSusunDragEl.style.cssText =
+      "position:absolute;display:none;justify-content:center;gap:0.45em;flex-wrap:wrap;" +
+      "box-sizing:border-box;pointer-events:auto;z-index:9;";
+
+    cabaranAnswersEl = document.createElement("div");
+    cabaranAnswersEl.id = "cabaran-answers";
+    cabaranAnswersEl.style.cssText = "display:contents;";
+
+    cabaranAnswerBtns = [0, 1, 2].map(function (index) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cabaran-choice-answer";
+      btn.style.cssText =
+        "position:absolute;margin:0;padding:0.35em 0.5em;" +
+        "border:2px solid #5c4a32;border-radius:16px;" +
+        "background:linear-gradient(180deg,rgba(255,248,232,0.95) 0%,rgba(255,231,184,0.95) 100%);" +
+        "color:#2a1f14;cursor:pointer;font-family:" +
+        BELAJAR_FONT +
+        ";font-size:clamp(1.1rem,5vmin,2rem);font-weight:700;touch-action:manipulation;" +
+        "z-index:10;box-sizing:border-box;display:flex;align-items:center;" +
+        "justify-content:center;box-shadow:0 3px 8px rgba(92,74,50,0.12);";
+
+      btn.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        handleCabaranChoiceAnswer(index);
+      });
+
+      section.appendChild(btn);
+      return btn;
+    });
+
+    const zone = document.createElement("div");
+    zone.id = "cabaran-zone";
+    zone.style.cssText = "display:contents;";
+    zone.appendChild(cabaranAnswersEl);
+    section.appendChild(cabaranProgressEl);
+    section.appendChild(cabaranTimerEl);
+    section.appendChild(cabaranQuestionEl);
+    section.appendChild(cabaranAudioVisualEl);
+    section.appendChild(cabaranBlankQuestionEl);
+    section.appendChild(cabaranTargetEl);
+    section.appendChild(cabaranSusunAnswerEl);
+    section.appendChild(cabaranSusunDragEl);
+    section.appendChild(zone);
+    cabaranZoneEl = zone;
+
+    cabaranSummaryOverlayEl = document.createElement("div");
+    cabaranSummaryOverlayEl.id = "cabaran-summary-overlay";
+    cabaranSummaryOverlayEl.setAttribute("aria-hidden", "true");
+    cabaranSummaryOverlayEl.style.cssText =
+      "position:absolute;inset:0;z-index:120;display:none;flex-direction:column;" +
+      "align-items:center;justify-content:center;gap:1rem;padding:1.25em;" +
+      "background:rgba(255,252,245,0.94);pointer-events:auto;";
+
+    const summaryTitle = document.createElement("p");
+    summaryTitle.id = "cabaran-summary-title";
+    summaryTitle.style.cssText =
+      "margin:0;font-family:" +
+      BELAJAR_FONT +
+      ";font-size:clamp(1.1rem,4.5vmin,1.6rem);font-weight:700;color:#2a1f14;text-align:center;";
+
+    const summaryBody = document.createElement("p");
+    summaryBody.id = "cabaran-summary-body";
+    summaryBody.style.cssText =
+      "margin:0;font-family:" +
+      BELAJAR_FONT +
+      ";font-size:clamp(0.95rem,3.8vmin,1.2rem);font-weight:700;color:#2a1f14;" +
+      "text-align:center;white-space:pre-line;line-height:1.4;";
+
+    const summaryActions = document.createElement("div");
+    summaryActions.style.cssText =
+      "display:flex;flex-wrap:wrap;justify-content:center;gap:0.75em;width:100%;max-width:22em;";
+
+    function makeSummaryBtn(label, onClick) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = label;
+      btn.style.cssText =
+        "flex:1 1 9em;margin:0;padding:0.65em 1em;border:2px solid #5c4a32;" +
+        "border-radius:14px;background:linear-gradient(180deg,#fff8e8 0%,#ffe7b8 100%);" +
+        "color:#2a1f14;cursor:pointer;font-family:" +
+        BELAJAR_FONT +
+        ";font-size:clamp(0.95rem,3.6vmin,1.1rem);font-weight:700;" +
+        "touch-action:manipulation;";
+      btn.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        onClick();
+      });
+      return btn;
+    }
+
+    summaryActions.appendChild(
+      makeSummaryBtn("Cuba Lagi", function () {
+        hideCabaranSummaryOverlay();
+        startCabaran();
+      })
+    );
+    summaryActions.appendChild(
+      makeSummaryBtn("Submenu", function () {
+        returnToCurrentCheckpointSubmenu();
+      })
+    );
+
+    cabaranSummaryOverlayEl.appendChild(summaryTitle);
+    cabaranSummaryOverlayEl.appendChild(summaryBody);
+    cabaranSummaryOverlayEl.appendChild(summaryActions);
+    section.appendChild(cabaranSummaryOverlayEl);
+
+    if (cabaranFeedback) {
+      cabaranFeedback.style.whiteSpace = "pre-line";
+      cabaranFeedback.style.textAlign = "center";
+    }
+
+    applyCabaranOverlayLayout();
+    applyCabaranDebugMode();
+  }
+
+  function returnToCurrentCheckpointSubmenu() {
+    clearCabaranAdvanceTimer();
+    clearCabaranCountdownTimer();
+    hideCabaranTimer();
+    stopCabaranRecognition();
+    clearCabaranFeedback();
+    hideCabaranSummaryOverlay();
+    cabaranQuestionLocked = false;
+    cabaranBusy = false;
+    stopBelajarAudio();
+    showScreen("island1");
+  }
+
+  function exitCabaranToHome() {
+    clearCabaranAdvanceTimer();
+    clearCabaranCountdownTimer();
+    hideCabaranTimer();
+    stopCabaranRecognition();
+    stopPronunciationCapture();
+    clearPronunciationFeedbackTimer();
+    clearCabaranFeedback();
+    hideCabaranSummaryOverlay();
+    cabaranQuestionLocked = false;
+    cabaranBusy = false;
+    cabaranQuestionNum = 1;
+    pronunciationRecordingBusy = false;
+    resetCabaranSessionMemory();
+    stopBelajarAudio();
+
+    const engine = getAssessmentEngine();
+
+    if (engine && engine.setStudentSession) {
+      engine.setStudentSession({
+        classId: "",
+        studentId: "",
+        studentName: "",
+      });
+    }
+
+    showScreen("home");
+  }
+
+  function replayCabaranQuestionAudioOnly() {
+    if (cabaranBusy || cabaranQuestionNum > CABARAN_TOTAL_QUESTIONS) {
+      return;
+    }
+
+    stopCabaranRecognition();
+    playCabaranTargetAudio();
+  }
+
+  function prepareCabaranScreen() {
+    const session = getCabaranStudentSession();
+
+    if (!session) {
+      window.alert("Sila log masuk: Pilih Kelas dan Nama Anda.");
+      showScreen("login");
+      return;
+    }
+
+    void initCabaranDatabase();
+    hideCabaranSummaryOverlay();
+    clearCabaranAdvanceTimer();
+    stopCabaranRecognition();
+    clearCabaranFeedback();
+
+    void canAccessCabaran().then(function (allowed) {
+      if (!allowed) {
+        window.alert("Selesaikan Belajar dan Latihan dahulu sebelum Cabaran.");
+        returnToCurrentCheckpointSubmenu();
+        return;
+      }
+
+      renderCabaranRound();
+    });
+  }
+
+  function startCabaran() {
+    hideLatihanCompletionOverlay();
     hideLatihanSusunCompletionOverlay();
-    showLatihanSusunFeedback(CABARAN_COMING_SOON_MSG, false);
+    hidePronunciationFeedback(latihanFeedback);
+    hidePronunciationFeedback(latihanSusunFeedbackEl);
+
+    void canAccessCabaran().then(function (allowed) {
+      if (!allowed) {
+        window.alert("Selesaikan Belajar dan Latihan dahulu sebelum Cabaran.");
+        return;
+      }
+
+      cabaranQuestionNum = 1;
+      cabaranQuestionLocked = false;
+      cabaranBusy = false;
+      resetCabaranSessionMemory();
+      ensureCabaranQuestionPlan(true);
+      showScreen("cabaran");
+    });
   }
 
   function continueFromLatihanChoiceCompletion() {
@@ -2640,7 +5769,7 @@
       return;
     }
 
-    showCabaranComingSoonOnLatihan();
+    startCabaran();
   }
 
   function showScreen(name) {
@@ -2670,6 +5799,10 @@
     }
 
     if (name === "latihan") {
+      if (previousScreen === "belajar") {
+        void markCabaranLearningStep("belajar");
+      }
+
       if (previousScreen !== "latihan") {
         latihanChoiceQuestionNum = 1;
         ensureLatihanChoiceQuestionPlan(true);
@@ -2686,6 +5819,16 @@
       }
 
       prepareLatihanSusunScreen();
+    }
+
+    if (name === "cabaran") {
+      if (previousScreen !== "cabaran") {
+        cabaranQuestionNum = 1;
+        resetCabaranSessionMemory();
+        ensureCabaranQuestionPlan(true);
+      }
+
+      prepareCabaranScreen();
     }
 
     if (name !== "tulis") {
@@ -2720,6 +5863,13 @@
       pronunciationRecordingBusy = false;
     }
 
+    if (name !== "cabaran") {
+      clearCabaranAdvanceTimer();
+      stopCabaranRecognition();
+      hideCabaranSummaryOverlay();
+      cabaranBusy = false;
+    }
+
     if (
       name !== "belajar" &&
       name !== "latihan" &&
@@ -2740,6 +5890,8 @@
     if (name === "login") {
       refreshLoginDropdowns();
     }
+
+    updateCabaranLayoutDebugPanelVisibility();
   }
 
   function getCurrentWritingTargetText() {
@@ -3371,6 +6523,7 @@
         : "Mula Cabaran";
     }
 
+    void markCabaranLearningStep("latihan_choice");
     latihanCompletionOverlayEl.style.display = "flex";
     latihanCompletionOverlayEl.setAttribute("aria-hidden", "false");
   }
@@ -6733,6 +9886,7 @@
     hideBelajarFeedback();
     latihanChoiceQuestionNum = 1;
     ensureLatihanChoiceQuestionPlan(true);
+    void markCabaranLearningStep("belajar");
     showScreen("latihan");
   }
 
@@ -7048,7 +10202,7 @@
       targetText: targetText,
       feedbackEl: cabaranFeedback,
       onBeforeListen: function () {
-        hidePronunciationFeedback(cabaranFeedback);
+        clearCabaranFeedback();
       },
     });
   }
@@ -7316,7 +10470,27 @@
 
     if (action === "latihan-susun-back") {
       showScreen("belajar");
+      return;
     }
+
+    if (action === "cabaran-ulang") {
+      replayCabaranQuestionAudioOnly();
+      return;
+    }
+
+    if (action === "cabaran-exit") {
+      exitCabaranToHome();
+      return;
+    }
+
+    if (action === "cabaran-submenu") {
+      returnToCurrentCheckpointSubmenu();
+      return;
+    }
+  }
+
+  if (DEBUG_CABARAN_LAYOUT) {
+    loadCabaranLayoutDebugFromStorage();
   }
 
   buildScreens();
