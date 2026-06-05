@@ -22,34 +22,53 @@
     feedback: { left: 31, top: 40, width: 38, height: 6 },
   };
 
+  /** Original cabaran.png answer button positions (%). */
+  const CABARAN_ANSWER_OVERLAY_ORIGINAL = {
+    answerA: { left: 12, top: 58, width: 24, height: 11 },
+    answerB: { left: 38, top: 58, width: 24, height: 11 },
+    answerC: { left: 64, top: 58, width: 24, height: 11 },
+  };
+
   /**
    * Cabaran HTML overlay positions (% of screen). Edit values here to adjust phone/tablet layout.
    * Visual reference: assets/cabaran.png — set DEBUG_CABARAN_LAYOUT = true to see red boxes.
    */
   const CABARAN_OVERLAY_LAYOUT = {
-    progressBox: { left: 19.4,top: 23.5,width: 64,height: 5 },
+    progressBox: { left: 19.4, top: 23.5, width: 64, height: 5 },
     instructionText: { left: 12, top: 33, width: 76, height: 5 },
-    blankQuestion: { left: 12, top: 40, width: 76, height: 10 },
+    blankQuestion: { left: 11.6, top: 39.4, width: 77, height: 12.8 },
     audioVisual: { left: 40, top: 40, width: 20, height: 10 },
-    answerA: { left: 12, top: 58, width: 24, height: 11 },
-    answerB: { left: 38, top: 58, width: 24, height: 11 },
-    answerC: { left: 64, top: 58, width: 24, height: 11 },
-    feedbackText: { left: 26, top: 74, width: 48, height: 6 },
+    answerA: { left: 12.4, top: 57.9, width: 24, height: 11 },
+    answerB: { left: 38.6, top: 57.9, width: 24, height: 11 },
+    answerC: { left: 64.4, top: 57.9, width: 24, height: 11 },
+    feedbackText: { left: 26.2, top: 72.9, width: 48, height: 6, fontSize: 2.6 },
     targetWord: { left: 12, top: 40, width: 76, height: 10 },
     susunAnswer: { left: 10, top: 46, width: 80, height: 12 },
-    susunDrag: { left: 10, top: 60, width: 80, height: 12 },
+    susunDrag: { left: 10.4, top: 59.9, width: 80, height: 12 },
     timerBox: { left: 73.9, top: 81.6, width: 12, height: 8, fontSize: 6 },
+    typingInput: { left: 12.1, top: 53.8, width: 76.4, height: 14.1, fontSize: 3.2 },
+    typingSubmit: { left: 76.2, top: 68.6, width: 14.2, height: 7.8, fontSize: 4.2 },
   };
+  
+  
   const CABARAN_OVERLAY_LAYOUT_DEFAULT = JSON.parse(
     JSON.stringify(CABARAN_OVERLAY_LAYOUT)
   );
+
+  ["answerA", "answerB", "answerC"].forEach(function (key) {
+    const original = CABARAN_ANSWER_OVERLAY_ORIGINAL[key];
+
+    CABARAN_OVERLAY_LAYOUT[key] = JSON.parse(JSON.stringify(original));
+    CABARAN_OVERLAY_LAYOUT_DEFAULT[key] = JSON.parse(JSON.stringify(original));
+  });
 
   /** Cabaran fixed button hotspots (%). Calibrate with DEBUG_CABARAN_LAYOUT = true. */
   const CABARAN_BUTTON_LAYOUT = {
     exitButton: { left: 84, top: 3, width: 11, height: 8 },
     submenuButton: { left: 3, top: 3, width: 14, height: 8 },
-    ulangButton: { left: 38, top: 88, width: 24, height: 7 },
+    ulangButton: { left: 38.2, top: 84.7, width: 24, height: 7 },
   };
+    
   const CABARAN_BUTTON_LAYOUT_DEFAULT = JSON.parse(
     JSON.stringify(CABARAN_BUTTON_LAYOUT)
   );
@@ -74,6 +93,8 @@
     "susunAnswer",
     "susunDrag",
     "timerBox",
+    "typingInput",
+    "typingSubmit",
   ];
   const CABARAN_CALIBRATION_KEYS = CABARAN_LAYOUT_KEYS.concat(
     CABARAN_BUTTON_LAYOUT_KEYS
@@ -676,6 +697,10 @@
   let cabaranBlankPrefixEl = null;
   let cabaranBlankSlotEl = null;
   let cabaranBlankSuffixEl = null;
+  let cabaranTypeInputWrapEl = null;
+  let cabaranTypeLabelEl = null;
+  let cabaranTypeInputEl = null;
+  let cabaranTypeSubmitBtn = null;
   let cabaranTargetEl = null;
   let cabaranAnswersEl = null;
   let cabaranAnswerBtns = [];
@@ -775,7 +800,9 @@
       layoutKey === "answerB" ||
       layoutKey === "answerC" ||
       layoutKey === "susunAnswer" ||
-      layoutKey === "susunDrag"
+      layoutKey === "susunDrag" ||
+      layoutKey === "typingInput" ||
+      layoutKey === "typingSubmit"
     ) {
       return "auto";
     }
@@ -957,6 +984,10 @@
         return cabaranSusunDragEl;
       case "timerBox":
         return cabaranTimerEl;
+      case "typingInput":
+        return cabaranTypeInputWrapEl;
+      case "typingSubmit":
+        return cabaranTypeSubmitBtn;
       default:
         return null;
     }
@@ -1962,7 +1993,7 @@
   }
 
   const LATIHAN_SUSUN_ADJUST_MODE = false;
-  const LATIHAN_SUSUN_TOTAL = 10;
+  const LATIHAN_SUSUN_TOTAL = 5;
   const LATIHAN_SUSUN_GUIDANCE_START = "Mari susun 😊";
   const LATIHAN_SUSUN_FEEDBACK_HIDE_MS = 2000;
 
@@ -3753,6 +3784,24 @@
     });
   }
 
+  function raiseCabaranChoiceAnswers() {
+    const section = document.getElementById("screen-cabaran");
+
+    if (!section || getCabaranQuestionMode() !== "choice") {
+      return;
+    }
+
+    cabaranAnswerBtns.forEach(function (btn) {
+      if (!btn) {
+        return;
+      }
+
+      btn.style.zIndex = "20";
+      btn.style.pointerEvents = "auto";
+      section.appendChild(btn);
+    });
+  }
+
   function applyCabaranButtonLayout() {
     CABARAN_BUTTON_LAYOUT_KEYS.forEach(function (key) {
       const btn = cabaranButtonHotspotEls[key];
@@ -3853,9 +3902,10 @@
     applyOverlay("blankQuestion", cabaranBlankQuestionEl);
     applyOverlay("audioVisual", cabaranAudioVisualEl);
     applyOverlay("targetWord", cabaranTargetEl);
-    applyOverlay("answerA", cabaranAnswerBtns[0]);
-    applyOverlay("answerB", cabaranAnswerBtns[1]);
-    applyOverlay("answerC", cabaranAnswerBtns[2]);
+    ["answerA", "answerB", "answerC"].forEach(function (layoutKey, index) {
+      applyOverlay(layoutKey, cabaranAnswerBtns[index]);
+    });
+    raiseCabaranChoiceAnswers();
     applyOverlay("susunAnswer", cabaranSusunAnswerEl);
     applyOverlay("susunDrag", cabaranSusunDragEl);
 
@@ -3874,6 +3924,23 @@
     if (cabaranTimerEl && L.timerBox) {
       applyOverlay("timerBox", cabaranTimerEl);
       applyCabaranTimerFontSize();
+    }
+
+    if (getCabaranQuestionMode() === "type") {
+      if (cabaranTypeInputWrapEl && L.typingInput) {
+        applyOverlay("typingInput", cabaranTypeInputWrapEl);
+        cabaranTypeInputWrapEl.style.zIndex = "30";
+        applyCabaranTypingInputFontSize();
+      }
+    } else if (!DEBUG_CABARAN_LAYOUT) {
+      clearCabaranTypingDebugMarkers();
+    }
+
+    syncCabaranTypingDebugCalibration();
+    bindCabaranTypingSubmitLayout();
+
+    if (getCabaranQuestionMode() === "type" && cabaranBlankQuestionEl) {
+      cabaranBlankQuestionEl.style.zIndex = "9";
     }
 
     applyCabaranButtonLayout();
@@ -4307,6 +4374,106 @@
     return rounds.slice(0, total);
   }
 
+  function buildCabaranSukuKataVkvSuffixRound(word) {
+    const w = String(word || "").trim().toLowerCase();
+    const syllables = splitLatihanSusunSyllables(w);
+
+    if (syllables.length < 2) {
+      return null;
+    }
+
+    const blankIndex = syllables.length - 1;
+    const correctAnswer = syllables[blankIndex];
+    const taughtSyllables = getCabaranTaughtSyllablePool();
+    const distractors = shuffleArray(
+      taughtSyllables.filter(function (s) {
+        return s !== correctAnswer;
+      })
+    ).slice(0, 2);
+    const options = shuffleArray([correctAnswer].concat(distractors));
+
+    return {
+      audioWord: w,
+      audioFolder: "perkataan_vkv",
+      prefix: syllables.slice(0, blankIndex).join(""),
+      suffix: syllables.slice(blankIndex + 1).join(""),
+      correctAnswer: correctAnswer,
+      options: options,
+      correctIndex: options.indexOf(correctAnswer),
+      difficulty: "medium",
+      showBlank: true,
+      questionMode: "choice",
+    };
+  }
+
+  function buildCabaranSukuKataKvkvTypeRound(word) {
+    const w = String(word || "").trim().toLowerCase();
+    const syllables = splitLatihanSusunSyllables(w);
+
+    if (syllables.length < 2) {
+      return null;
+    }
+
+    const blankIndex = syllables.length - 1;
+    const correctAnswer = syllables[blankIndex];
+
+    return {
+      audioWord: w,
+      audioFolder: "perkataan_kvkv",
+      prefix: syllables.slice(0, blankIndex).join(""),
+      suffix: syllables.slice(blankIndex + 1).join(""),
+      correctAnswer: correctAnswer,
+      difficulty: "hard",
+      showBlank: true,
+      showTypeInput: true,
+      questionMode: "type",
+    };
+  }
+
+  function buildCabaranSukuKataQuestionSequence(total) {
+    const syllableItems = buildPracticeSequence(
+      getCabaranTaughtSyllablePool(),
+      CABARAN_SHORT_EASY_COUNT
+    );
+    const vkvWords = buildPracticeSequence(
+      BELAJAR_CONTENT.perkataan_vkv.slice(),
+      CABARAN_SHORT_MEDIUM_COUNT
+    );
+    const kvkvWords = buildPracticeSequence(
+      BELAJAR_CONTENT.perkataan_kvkv.slice(),
+      CABARAN_SHORT_HARD_COUNT
+    );
+    const rounds = [];
+
+    syllableItems.forEach(function (item) {
+      rounds.push(buildCabaranEasyChoiceRound(item));
+    });
+
+    vkvWords.forEach(function (word) {
+      const round = buildCabaranSukuKataVkvSuffixRound(word);
+
+      if (round) {
+        rounds.push(round);
+      }
+    });
+
+    kvkvWords.forEach(function (word) {
+      const round = buildCabaranSukuKataKvkvTypeRound(word);
+
+      if (round) {
+        rounds.push(round);
+      }
+    });
+
+    while (rounds.length < total) {
+      rounds.push(
+        buildCabaranEasyChoiceRound(getCabaranTaughtSyllablePool()[0] || "ba")
+      );
+    }
+
+    return rounds.slice(0, total);
+  }
+
   function buildCabaranShortSoundQuestionSequence(total) {
     const easyItems = buildPracticeSequence(
       getLatihanPracticePool(),
@@ -4364,6 +4531,10 @@
         );
       } else if (selectedCheckpoint === "konsonan") {
         cabaranQuestionItems = buildCabaranKonsonanQuestionSequence(
+          CABARAN_TOTAL_QUESTIONS
+        );
+      } else if (selectedCheckpoint === "suku_kata_kv") {
+        cabaranQuestionItems = buildCabaranSukuKataQuestionSequence(
           CABARAN_TOTAL_QUESTIONS
         );
       } else {
@@ -4424,10 +4595,21 @@
       cabaranBlankSuffixEl.textContent = round.suffix || "";
     }
 
+    if (cabaranBlankSlotEl) {
+      const isType = round && round.questionMode === "type";
+      cabaranBlankSlotEl.textContent = isType ? "?" : "";
+    }
+
     cabaranBlankQuestionEl.style.display = "flex";
   }
 
   function getCabaranQuestionMode() {
+    const round = getCabaranCurrentRound();
+
+    if (round && round.questionMode) {
+      return round.questionMode;
+    }
+
     if (isCabaranChoiceCheckpoint()) {
       return "choice";
     }
@@ -4452,6 +4634,10 @@
 
     if (mode === "susun") {
       return "Susun jawapan yang betul.";
+    }
+
+    if (mode === "type") {
+      return "Taip jawapan yang betul.";
     }
 
     return "Pilih jawapan yang betul.";
@@ -4516,7 +4702,7 @@
       return CABARAN_CHOICE_COUNTDOWN_SEC;
     }
 
-    if (mode === "susun") {
+    if (mode === "susun" || mode === "type") {
       return CABARAN_SUSUN_COUNTDOWN_SEC;
     }
 
@@ -4551,6 +4737,191 @@
     }
 
     cabaranTimerEl.style.fontSize = String(fontSize);
+  }
+
+  function applyCabaranTypingInputFontSize() {
+    if (!cabaranTypeInputEl || !CABARAN_OVERLAY_LAYOUT.typingInput) {
+      return;
+    }
+
+    const fontSize = CABARAN_OVERLAY_LAYOUT.typingInput.fontSize;
+
+    if (fontSize == null) {
+      return;
+    }
+
+    if (typeof fontSize === "number") {
+      cabaranTypeInputEl.style.fontSize =
+        "clamp(0.9rem, " + fontSize + "vmin, 2.2rem)";
+      return;
+    }
+
+    cabaranTypeInputEl.style.fontSize = String(fontSize);
+  }
+
+  function clearCabaranTypingDebugMarkers() {
+    if (DEBUG_CABARAN_LAYOUT) {
+      return;
+    }
+
+    [cabaranTypeInputWrapEl, cabaranTypeSubmitBtn].forEach(function (el) {
+      if (!el) {
+        return;
+      }
+
+      el.removeAttribute("data-cabaran-overlay");
+      el.removeAttribute("data-debug-label");
+    });
+  }
+
+  function bindCabaranTypingSubmitLayout() {
+    const rect = CABARAN_OVERLAY_LAYOUT.typingSubmit;
+
+    if (!cabaranTypeSubmitBtn || !rect || getCabaranQuestionMode() !== "type") {
+      return;
+    }
+
+    applyCabaranOverlayRect(cabaranTypeSubmitBtn, rect);
+    cabaranTypeSubmitBtn.style.position = "absolute";
+    cabaranTypeSubmitBtn.style.boxSizing = "border-box";
+    cabaranTypeSubmitBtn.style.zIndex = "31";
+    cabaranTypeSubmitBtn.style.pointerEvents = getCabaranOverlayPointerEvents("typingSubmit");
+    markCabaranOverlayDebug(cabaranTypeSubmitBtn, "typingSubmit");
+    applyCabaranTypingSubmitFontSize();
+  }
+
+  function resetCabaranTypingUiAnimations() {
+    if (cabaranTypeInputEl) {
+      cabaranTypeInputEl.classList.remove("cabaran-type-input--attention");
+    }
+
+    if (cabaranTypeSubmitBtn) {
+      cabaranTypeSubmitBtn.classList.remove("cabaran-type-submit--attention");
+    }
+  }
+
+  function startCabaranTypingInputAttention() {
+    if (!cabaranTypeInputEl || DEBUG_CABARAN_LAYOUT) {
+      return;
+    }
+
+    cabaranTypeInputEl.classList.remove("cabaran-type-input--attention");
+    void cabaranTypeInputEl.offsetWidth;
+    cabaranTypeInputEl.classList.add("cabaran-type-input--attention");
+  }
+
+  function stopCabaranTypingInputAttention() {
+    if (cabaranTypeInputEl) {
+      cabaranTypeInputEl.classList.remove("cabaran-type-input--attention");
+    }
+  }
+
+  function startCabaranTypingSubmitAttention() {
+    if (!cabaranTypeSubmitBtn || cabaranTypeSubmitBtn.disabled || DEBUG_CABARAN_LAYOUT) {
+      return;
+    }
+
+    cabaranTypeSubmitBtn.classList.add("cabaran-type-submit--attention");
+  }
+
+  function stopCabaranTypingSubmitAttention() {
+    if (cabaranTypeSubmitBtn) {
+      cabaranTypeSubmitBtn.classList.remove("cabaran-type-submit--attention");
+    }
+  }
+
+  function focusCabaranTypeInputIfSafe() {
+    if (
+      DEBUG_CABARAN_LAYOUT ||
+      !cabaranTypeInputEl ||
+      cabaranQuestionLocked ||
+      cabaranBusy ||
+      getCabaranQuestionMode() !== "type"
+    ) {
+      return;
+    }
+
+    window.requestAnimationFrame(function () {
+      if (
+        activeScreen !== "cabaran" ||
+        cabaranQuestionLocked ||
+        getCabaranQuestionMode() !== "type" ||
+        !cabaranTypeInputEl
+      ) {
+        return;
+      }
+
+      cabaranTypeInputEl.focus({ preventScroll: true });
+    });
+  }
+
+  function syncCabaranTypingDebugCalibration() {
+    const showTypingUi = getCabaranQuestionMode() === "type";
+
+    if (cabaranTypeInputWrapEl) {
+      cabaranTypeInputWrapEl.style.display = showTypingUi ? "flex" : "none";
+      cabaranTypeInputWrapEl.style.pointerEvents = showTypingUi ? "auto" : "none";
+      cabaranTypeInputWrapEl.style.zIndex = showTypingUi ? "30" : "";
+    }
+
+    if (cabaranTypeLabelEl) {
+      cabaranTypeLabelEl.style.display = showTypingUi ? "block" : "none";
+    }
+
+    if (cabaranTypeInputEl) {
+      cabaranTypeInputEl.style.display = showTypingUi ? "block" : "none";
+
+      if (!showTypingUi) {
+        cabaranTypeInputEl.value = "";
+        cabaranTypeInputEl.disabled = false;
+        cabaranTypeInputEl.readOnly = false;
+        cabaranTypeInputEl.style.pointerEvents = "none";
+      } else if (DEBUG_CABARAN_LAYOUT) {
+        cabaranTypeInputEl.style.pointerEvents = "none";
+      } else {
+        cabaranTypeInputEl.disabled = false;
+        cabaranTypeInputEl.readOnly = false;
+        cabaranTypeInputEl.style.pointerEvents = "auto";
+      }
+    }
+
+    if (cabaranTypeSubmitBtn) {
+      cabaranTypeSubmitBtn.style.display = showTypingUi ? "flex" : "none";
+      cabaranTypeSubmitBtn.style.pointerEvents = showTypingUi ? "auto" : "none";
+      cabaranTypeSubmitBtn.style.zIndex = showTypingUi ? "31" : "";
+
+      if (!showTypingUi) {
+        cabaranTypeSubmitBtn.disabled = false;
+      }
+    }
+
+    if (!showTypingUi) {
+      resetCabaranTypingUiAnimations();
+
+      if (!DEBUG_CABARAN_LAYOUT) {
+        clearCabaranTypingDebugMarkers();
+      }
+    }
+  }
+
+  function applyCabaranTypingSubmitFontSize() {
+    if (!cabaranTypeSubmitBtn || !CABARAN_OVERLAY_LAYOUT.typingSubmit) {
+      return;
+    }
+
+    const fontSize = CABARAN_OVERLAY_LAYOUT.typingSubmit.fontSize;
+
+    if (fontSize == null) {
+      return;
+    }
+
+    if (typeof fontSize === "number") {
+      cabaranTypeSubmitBtn.style.fontSize =
+        "clamp(1rem, " + fontSize + "vmin, 2.6rem)";
+      return;
+    }
+
+    cabaranTypeSubmitBtn.style.fontSize = String(fontSize);
   }
 
   function renderCabaranTimerDisplay(seconds) {
@@ -4618,7 +4989,7 @@
 
     const mode = getCabaranQuestionMode();
 
-    if (mode !== "choice" && mode !== "susun") {
+    if (mode !== "choice" && mode !== "susun" && mode !== "type") {
       return;
     }
 
@@ -4635,6 +5006,25 @@
       rememberCabaranAnswer({
         targetText: targetText,
         answer: "",
+        transcript: "",
+        confidence: "",
+        isCorrect: false,
+      });
+    } else if (mode === "type") {
+      stopCabaranTypingInputAttention();
+      stopCabaranTypingSubmitAttention();
+
+      if (cabaranTypeInputEl) {
+        cabaranTypeInputEl.disabled = true;
+      }
+
+      if (cabaranTypeSubmitBtn) {
+        cabaranTypeSubmitBtn.disabled = true;
+      }
+
+      rememberCabaranAnswer({
+        targetText: targetText,
+        answer: cabaranTypeInputEl ? cabaranTypeInputEl.value : "",
         transcript: "",
         confidence: "",
         isCorrect: false,
@@ -5063,19 +5453,40 @@
     const isChoice = mode === "choice";
     const isSebut = mode === "sebut";
     const isSusun = mode === "susun";
+    const isType = mode === "type";
     const round = getCabaranCurrentRound();
     const showBlank =
-      isChoice && isCabaranChoiceCheckpoint() && round && round.showBlank;
+      (isChoice && isCabaranChoiceCheckpoint() && round && round.showBlank) ||
+      (isType && round && round.showBlank);
     const showAudioVisual =
       isChoice && isCabaranChoiceCheckpoint() && round && !round.showBlank;
 
     cabaranAnswerBtns.forEach(function (btn) {
       btn.style.display = isChoice ? "flex" : "none";
+      btn.style.pointerEvents = isChoice ? "auto" : "none";
     });
 
-    if (cabaranBlankQuestionEl) {
-      cabaranBlankQuestionEl.style.display = showBlank ? "flex" : "none";
+    if (isChoice) {
+      raiseCabaranChoiceAnswers();
     }
+
+    if (cabaranBlankQuestionEl) {
+      cabaranBlankQuestionEl.style.display = showBlank || isType ? "flex" : "none";
+      cabaranBlankQuestionEl.style.pointerEvents = "none";
+      cabaranBlankQuestionEl.style.zIndex = "9";
+    }
+
+    if (cabaranBlankSlotEl) {
+      if (isType || showBlank) {
+        cabaranBlankSlotEl.style.display = "inline-flex";
+        cabaranBlankSlotEl.textContent = isType ? "?" : "";
+      } else {
+        cabaranBlankSlotEl.style.display = "none";
+        cabaranBlankSlotEl.textContent = "";
+      }
+    }
+
+    syncCabaranTypingDebugCalibration();
 
     if (cabaranAudioVisualEl) {
       cabaranAudioVisualEl.style.display = showAudioVisual ? "flex" : "none";
@@ -5316,6 +5727,89 @@
     scheduleCabaranAdvance();
   }
 
+  function submitCabaranTypeAnswer() {
+    if (cabaranQuestionLocked || cabaranBusy) {
+      return;
+    }
+
+    const round = getCabaranCurrentRound();
+
+    if (!round || !cabaranTypeInputEl) {
+      return;
+    }
+
+    const typed = String(cabaranTypeInputEl.value || "").trim().toLowerCase();
+
+    if (!typed) {
+      return;
+    }
+
+    clearCabaranCountdownTimer();
+    cabaranQuestionLocked = true;
+    const expected = String(round.correctAnswer || "").trim().toLowerCase();
+    const isCorrect = typed === expected;
+    const targetText = getCabaranTargetItem();
+
+    if (isCorrect) {
+      cabaranCorrectCount += 1;
+      showCabaranFeedbackMessage(CABARAN_CORRECT_FEEDBACK);
+    } else {
+      showCabaranFeedbackMessage(CABARAN_WRONG_FEEDBACK);
+    }
+
+    cabaranTypeInputEl.disabled = true;
+    stopCabaranTypingInputAttention();
+    stopCabaranTypingSubmitAttention();
+
+    if (cabaranTypeSubmitBtn) {
+      cabaranTypeSubmitBtn.disabled = true;
+    }
+
+    rememberCabaranAnswer({
+      targetText: targetText,
+      answer: typed,
+      transcript: "",
+      confidence: "",
+      isCorrect: isCorrect,
+    });
+    scheduleCabaranAdvance();
+  }
+
+  function renderCabaranTypeRound() {
+    const round = getCabaranCurrentRound();
+
+    if (!round) {
+      return;
+    }
+
+    cabaranQuestionLocked = false;
+    resetCabaranTypingUiAnimations();
+
+    if (cabaranQuestionEl) {
+      cabaranQuestionEl.textContent = getCabaranQuestionInstruction();
+    }
+
+    renderCabaranBlankQuestion(round);
+
+    if (cabaranTypeInputEl) {
+      cabaranTypeInputEl.value = "";
+      cabaranTypeInputEl.disabled = false;
+      cabaranTypeInputEl.readOnly = false;
+    }
+
+    if (cabaranTypeSubmitBtn) {
+      cabaranTypeSubmitBtn.disabled = false;
+    }
+
+    applyCabaranOverlayLayout();
+    setCabaranModeUi("type");
+    playCabaranTargetAudio();
+    startCabaranCountdown();
+    startCabaranTypingInputAttention();
+    startCabaranTypingSubmitAttention();
+    focusCabaranTypeInputIfSafe();
+  }
+
   function renderCabaranChoiceRound() {
     const round = buildCabaranChoiceRound();
     cabaranChoiceCorrectIndex = round.correctIndex;
@@ -5403,6 +5897,11 @@
 
     if (mode === "sebut") {
       renderCabaranSebutRound();
+      return;
+    }
+
+    if (mode === "type") {
+      renderCabaranTypeRound();
       return;
     }
 
@@ -5624,9 +6123,84 @@
     cabaranBlankSuffixEl = document.createElement("span");
     cabaranBlankSuffixEl.className = "cabaran-blank-suffix";
 
+    cabaranTypeInputWrapEl = document.createElement("div");
+    cabaranTypeInputWrapEl.id = "cabaran-type-input-wrap";
+
+    cabaranTypeLabelEl = document.createElement("p");
+    cabaranTypeLabelEl.id = "cabaran-type-label";
+    cabaranTypeLabelEl.textContent = "\u270F\uFE0F Taip jawapan kamu";
+
+    cabaranTypeInputEl = document.createElement("input");
+    cabaranTypeInputEl.type = "text";
+    cabaranTypeInputEl.id = "cabaran-type-input";
+    cabaranTypeInputEl.setAttribute("aria-label", "Taip jawapan");
+    cabaranTypeInputEl.placeholder = "Taip jawapan di sini";
+    cabaranTypeInputEl.autocomplete = "off";
+    cabaranTypeInputEl.autocapitalize = "off";
+    cabaranTypeInputEl.spellcheck = false;
+    cabaranTypeInputEl.addEventListener("pointerdown", function (event) {
+      if (DEBUG_CABARAN_LAYOUT) {
+        return;
+      }
+
+      event.stopPropagation();
+    });
+    cabaranTypeInputEl.addEventListener("touchstart", function () {
+      cabaranTypeInputEl.focus();
+    }, { passive: true });
+    cabaranTypeInputEl.addEventListener("input", function () {
+      stopCabaranTypingInputAttention();
+    });
+    cabaranTypeInputEl.addEventListener("animationend", function (event) {
+      if (event.animationName === "cabaran-type-input-attention") {
+        stopCabaranTypingInputAttention();
+      }
+    });
+    cabaranTypeInputEl.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submitCabaranTypeAnswer();
+      }
+    });
+    cabaranTypeInputWrapEl.addEventListener("click", function (event) {
+      if (DEBUG_CABARAN_LAYOUT || !cabaranTypeInputEl) {
+        return;
+      }
+
+      if (event.target !== cabaranTypeInputEl) {
+        cabaranTypeInputEl.focus();
+      }
+    });
+
+    cabaranTypeSubmitBtn = document.createElement("button");
+    cabaranTypeSubmitBtn.type = "button";
+    cabaranTypeSubmitBtn.id = "cabaran-type-submit";
+    cabaranTypeSubmitBtn.setAttribute("aria-label", "Semak");
+    cabaranTypeSubmitBtn.textContent = "\u27A1\uFE0F";
+    cabaranTypeSubmitBtn.style.position = "absolute";
+    cabaranTypeSubmitBtn.style.boxSizing = "border-box";
+    cabaranTypeSubmitBtn.addEventListener("pointerdown", function (event) {
+      if (DEBUG_CABARAN_LAYOUT) {
+        return;
+      }
+
+      event.stopPropagation();
+    });
+    cabaranTypeSubmitBtn.addEventListener("click", function (event) {
+      if (DEBUG_CABARAN_LAYOUT) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      submitCabaranTypeAnswer();
+    });
+
     cabaranBlankQuestionEl.appendChild(cabaranBlankPrefixEl);
     cabaranBlankQuestionEl.appendChild(cabaranBlankSlotEl);
     cabaranBlankQuestionEl.appendChild(cabaranBlankSuffixEl);
+    cabaranTypeInputWrapEl.appendChild(cabaranTypeLabelEl);
+    cabaranTypeInputWrapEl.appendChild(cabaranTypeInputEl);
 
     cabaranTargetEl = document.createElement("p");
     cabaranTargetEl.id = "cabaran-target";
@@ -5654,10 +6228,14 @@
     cabaranAnswersEl.id = "cabaran-answers";
     cabaranAnswersEl.style.cssText = "display:contents;";
 
+    const cabaranAnswerIds = ["cabaran-answer-a", "cabaran-answer-b", "cabaran-answer-c"];
+
     cabaranAnswerBtns = [0, 1, 2].map(function (index) {
       const btn = document.createElement("button");
       btn.type = "button";
+      btn.id = cabaranAnswerIds[index];
       btn.className = "cabaran-choice-answer";
+      btn.dataset.cabaranAnswerIndex = String(index);
       btn.style.cssText =
         "position:absolute;margin:0;padding:0.35em 0.5em;" +
         "border:2px solid #5c4a32;border-radius:16px;" +
@@ -5665,7 +6243,7 @@
         "color:#2a1f14;cursor:pointer;font-family:" +
         BELAJAR_FONT +
         ";font-size:clamp(1.1rem,5vmin,2rem);font-weight:700;touch-action:manipulation;" +
-        "z-index:10;box-sizing:border-box;display:flex;align-items:center;" +
+        "z-index:20;box-sizing:border-box;display:flex;align-items:center;" +
         "justify-content:center;box-shadow:0 3px 8px rgba(92,74,50,0.12);";
 
       btn.addEventListener("click", function (event) {
@@ -5674,7 +6252,7 @@
         handleCabaranChoiceAnswer(index);
       });
 
-      section.appendChild(btn);
+      cabaranAnswersEl.appendChild(btn);
       return btn;
     });
 
@@ -5687,6 +6265,8 @@
     section.appendChild(cabaranQuestionEl);
     section.appendChild(cabaranAudioVisualEl);
     section.appendChild(cabaranBlankQuestionEl);
+    section.appendChild(cabaranTypeInputWrapEl);
+    section.appendChild(cabaranTypeSubmitBtn);
     section.appendChild(cabaranTargetEl);
     section.appendChild(cabaranSusunAnswerEl);
     section.appendChild(cabaranSusunDragEl);
