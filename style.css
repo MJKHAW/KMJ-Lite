@@ -1340,14 +1340,55 @@ body.debug-hotspots .hotspot::after {
   cursor: grab;
 }
 
-#screen-latihan_susun #latihan-susun-feedback {
+#screen-latihan_susun:not(.latihan-susun-adjust-mode) #latihan-susun-feedback {
+  z-index: 12;
+  padding: 0.35em 0.55em !important;
+  border: 2px solid #5c4a32 !important;
+  border-radius: 16px !important;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 248, 232, 0.96) 0%,
+    rgba(255, 231, 184, 0.96) 100%
+  ) !important;
+  box-shadow: 0 3px 10px rgba(42, 31, 20, 0.18) !important;
+  font-weight: 800 !important;
+  line-height: 1.15;
+  color: #2a1f14 !important;
+  text-shadow: none !important;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+#latihan-susun-feedback.latihan-susun-feedback--correct {
+  animation: cabaran-feedback-correct 1s ease-out both;
+}
+
+#latihan-susun-feedback.latihan-susun-feedback--wrong {
+  animation: cabaran-feedback-wrong 1s ease-in-out both;
+}
+
+#screen-latihan_susun.latihan-susun-adjust-mode #latihan-susun-feedback {
   z-index: 12;
   padding: 0.35em 0.5em;
   border-radius: 16px;
-  font-size: clamp(1rem, 4.2vmin, 1.65rem);
   line-height: 1.15;
   box-shadow: 0 3px 10px rgba(42, 31, 20, 0.18);
-  overflow: hidden;
+  overflow: visible;
+}
+
+#screen-latihan_susun.latihan-susun-adjust-mode .latihan-cal-resize-handle {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px solid rgba(200, 0, 0, 0.95);
+  border-radius: 2px;
+  z-index: 10001;
+  pointer-events: auto;
 }
 
 #latihan-susun-completion-overlay {
@@ -1426,6 +1467,12 @@ body.debug-hotspots .hotspot::after {
   font-weight: 700;
   pointer-events: auto;
   touch-action: manipulation;
+}
+
+#screen-latihan_susun.latihan-susun-adjust-mode #latihan-susun-feedback.latihan-susun-feedback--correct,
+#screen-latihan_susun.latihan-susun-adjust-mode #latihan-susun-feedback.latihan-susun-feedback--wrong {
+  animation: none !important;
+  transform: none !important;
 }
 
 #screen-latihan_susun.latihan-susun-adjust-mode [data-hotspot="latihan_susun_kembali"],

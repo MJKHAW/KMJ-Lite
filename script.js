@@ -1998,7 +1998,7 @@
   const LATIHAN_SUSUN_FEEDBACK_HIDE_MS = 2000;
 
   const LATIHAN_SUSUN_LAYOUT = {
-    feedback: { left: 31, top: 40, width: 38, height: 6 },
+    feedbackText: { left: 10.9, top: 40.3, width: 79, height: 5.5, fontSize: 2.5 },
     progress: { left: 16, top: 32.6, width: 71, height: 6 },
     answerSlots: { left: 9.8, top: 45.6, width: 80, height: 18 },
     dragSlots: { left: 10, top: 72, width: 80, height: 16 },
@@ -2042,7 +2042,13 @@
   }
 
   function formatLatihanSusunDebugLabel(name, rect) {
-    return formatLatihanLayoutDebugLabel(name, rect);
+    let label = formatLatihanLayoutDebugLabel(name, rect);
+
+    if (rect && rect.fontSize != null) {
+      label += " fontSize:" + rect.fontSize;
+    }
+
+    return label;
   }
 
   function applyLatihanSusunRect(el, rect) {
@@ -2196,13 +2202,38 @@
     }
   }
 
+  function clearLatihanSusunFeedbackAnimation() {
+    if (!latihanSusunFeedbackEl) {
+      return;
+    }
+
+    latihanSusunFeedbackEl.classList.remove(
+      "latihan-susun-feedback--correct",
+      "latihan-susun-feedback--wrong"
+    );
+    latihanSusunFeedbackEl.style.animation = "none";
+  }
+
   function showLatihanSusunFeedback(message, autoHide) {
     if (!latihanSusunFeedbackEl) {
       return;
     }
 
     applyLatihanSusunFeedbackLayout();
+    clearLatihanSusunFeedbackAnimation();
+
+    const text = String(message || "");
     showPronunciationFeedbackMessage(latihanSusunFeedbackEl, message);
+
+    if (text.indexOf("Hebat") === 0 || text.indexOf("Betul") === 0) {
+      void latihanSusunFeedbackEl.offsetWidth;
+      latihanSusunFeedbackEl.style.animation = "";
+      latihanSusunFeedbackEl.classList.add("latihan-susun-feedback--correct");
+    } else if (text.indexOf("Cuba lagi") === 0 || text.indexOf("Susun semua") === 0) {
+      void latihanSusunFeedbackEl.offsetWidth;
+      latihanSusunFeedbackEl.style.animation = "";
+      latihanSusunFeedbackEl.classList.add("latihan-susun-feedback--wrong");
+    }
 
     clearLatihanSusunFeedbackHideTimer();
 
@@ -2212,6 +2243,7 @@
 
         if (activeScreen === "latihan_susun") {
           hidePronunciationFeedback(latihanSusunFeedbackEl);
+          clearLatihanSusunFeedbackAnimation();
 
           if (isLatihanSusunAdjustActive()) {
             syncLatihanSusunAdjustPreview();
@@ -2221,12 +2253,31 @@
     }
   }
 
-  function applyLatihanSusunFeedbackLayout() {
-    if (!latihanSusunFeedbackEl || !LATIHAN_SUSUN_LAYOUT.feedback) {
+  function applyLatihanSusunFeedbackFontSize() {
+    const rect = LATIHAN_SUSUN_LAYOUT.feedbackText;
+
+    if (!latihanSusunFeedbackEl || !rect || rect.fontSize == null) {
       return;
     }
 
-    applyLatihanSusunRect(latihanSusunFeedbackEl, LATIHAN_SUSUN_LAYOUT.feedback);
+    if (typeof rect.fontSize === "number") {
+      latihanSusunFeedbackEl.style.fontSize =
+        "clamp(1rem, " + rect.fontSize + "vmin, 2.2rem)";
+      return;
+    }
+
+    latihanSusunFeedbackEl.style.fontSize = String(rect.fontSize);
+  }
+
+  function applyLatihanSusunFeedbackLayout() {
+    const rect = LATIHAN_SUSUN_LAYOUT.feedbackText;
+
+    if (!latihanSusunFeedbackEl || !rect) {
+      return;
+    }
+
+    applyLatihanSusunRect(latihanSusunFeedbackEl, rect);
+    latihanSusunFeedbackEl.style.position = "absolute";
     latihanSusunFeedbackEl.style.transform = "none";
     latihanSusunFeedbackEl.style.maxWidth = "none";
     latihanSusunFeedbackEl.style.boxSizing = "border-box";
@@ -2234,6 +2285,11 @@
     latihanSusunFeedbackEl.style.alignItems = "center";
     latihanSusunFeedbackEl.style.justifyContent = "center";
     latihanSusunFeedbackEl.style.textAlign = "center";
+    applyLatihanSusunFeedbackFontSize();
+
+    if (isLatihanSusunAdjustActive()) {
+      ensureLatihanSusunCalResizeHandle(latihanSusunFeedbackEl, "feedbackText");
+    }
   }
 
   function hideLatihanSusunReinforcement() {
@@ -2623,6 +2679,12 @@
 
     updateLatihanSusunProgress();
     hideLatihanSusunReinforcement();
+
+    if (!isLatihanSusunAdjustActive()) {
+      clearLatihanSusunFeedbackAnimation();
+      hidePronunciationFeedback(latihanSusunFeedbackEl);
+    }
+
     applyLatihanSusunLayout();
     setLatihanSusunDebugLabels();
     syncLatihanSusunAdjustPreview();
@@ -2631,7 +2693,10 @@
   function runLatihanSusunQuestionStart() {
     const token = (latihanSusunQuestionStartToken += 1);
 
-    showLatihanSusunFeedback(LATIHAN_SUSUN_GUIDANCE_START);
+    if (!isLatihanSusunAdjustActive()) {
+      clearLatihanSusunFeedbackAnimation();
+      hidePronunciationFeedback(latihanSusunFeedbackEl);
+    }
 
     window.setTimeout(function () {
       if (token !== latihanSusunQuestionStartToken || activeScreen !== "latihan_susun") {
@@ -2659,6 +2724,7 @@
   function resetLatihanSusunQuestion() {
     latihanSusunQuestionStartToken += 1;
     clearLatihanSusunFeedbackHideTimer();
+    clearLatihanSusunFeedbackAnimation();
     hidePronunciationFeedback(latihanSusunFeedbackEl);
     hideLatihanSusunReinforcement();
     renderLatihanSusunBoard(buildLatihanSusunRound());
@@ -2764,10 +2830,10 @@
       );
     }
 
-    if (latihanSusunFeedbackEl && L.feedback) {
+    if (latihanSusunFeedbackEl && L.feedbackText) {
       latihanSusunFeedbackEl.dataset.debugLabel = formatLatihanSusunDebugLabel(
-        "FEEDBACK",
-        L.feedback
+        "FEEDBACK_TEXT",
+        L.feedbackText
       );
     }
 
@@ -2839,6 +2905,8 @@
       return;
     }
 
+    event.preventDefault();
+
     const pointer = latihanClientToPct(
       event.clientX,
       event.clientY,
@@ -2903,29 +2971,48 @@
     }
   }
 
+  function ensureLatihanSusunCalResizeHandle(el, layoutKey) {
+    if (!el) {
+      return;
+    }
+
+    let handle = el.querySelector(".latihan-cal-resize-handle");
+
+    if (handle) {
+      return;
+    }
+
+    handle = document.createElement("span");
+    handle.className = "latihan-cal-resize-handle";
+    handle.setAttribute("aria-hidden", "true");
+    handle.addEventListener("pointerdown", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      startLatihanSusunCalAdjust(event, layoutKey, "resize");
+    });
+    el.appendChild(handle);
+  }
+
   function bindLatihanSusunAdjustTarget(el, layoutKey) {
-    if (!el || el.dataset.latihanSusunCalBound === "1") {
+    if (!el) {
+      return;
+    }
+
+    ensureLatihanSusunCalResizeHandle(el, layoutKey);
+
+    if (el.dataset.latihanSusunCalBound === "1") {
       return;
     }
 
     el.dataset.latihanSusunCalBound = "1";
     el.classList.add("latihan-susun-cal-target");
 
-    if (!el.querySelector(".latihan-cal-resize-handle")) {
-      const handle = document.createElement("span");
-      handle.className = "latihan-cal-resize-handle";
-      handle.setAttribute("aria-hidden", "true");
-      el.appendChild(handle);
-
-      handle.addEventListener("pointerdown", function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        startLatihanSusunCalAdjust(event, layoutKey, "resize");
-      });
-    }
-
     el.addEventListener("pointerdown", function (event) {
-      if (event.target.classList.contains("latihan-cal-resize-handle")) {
+      if (
+        event.target &&
+        event.target.classList &&
+        event.target.classList.contains("latihan-cal-resize-handle")
+      ) {
         return;
       }
 
@@ -2945,7 +3032,7 @@
     }
 
     const targets = [
-      { key: "feedback", label: "FEEDBACK", el: function () { return latihanSusunFeedbackEl; } },
+      { key: "feedbackText", label: "FEEDBACK_TEXT", el: function () { return latihanSusunFeedbackEl; } },
       { key: "progress", label: "PROGRESS", el: function () { return latihanSusunProgressEl; } },
       { key: "answerSlots", label: "ANSWER_AREA", el: function () { return latihanSusunAnswerAreaEl; } },
       { key: "dragSlots", label: "DRAG_AREA", el: function () { return latihanSusunDragAreaEl; } },
@@ -2986,9 +3073,9 @@
     });
 
     if (section.dataset.latihanSusunCalListeners !== "1") {
-      section.addEventListener("pointermove", onLatihanSusunCalPointerMove);
-      section.addEventListener("pointerup", onLatihanSusunCalPointerUp);
-      section.addEventListener("pointercancel", onLatihanSusunCalPointerUp);
+      document.addEventListener("pointermove", onLatihanSusunCalPointerMove, { passive: false });
+      document.addEventListener("pointerup", onLatihanSusunCalPointerUp);
+      document.addEventListener("pointercancel", onLatihanSusunCalPointerUp);
       section.dataset.latihanSusunCalListeners = "1";
     }
   }
@@ -3051,7 +3138,13 @@
     if (latihanSusunFeedbackEl) {
       applyLatihanSusunFeedbackLayout();
       clearLatihanSusunFeedbackHideTimer();
-      showPronunciationFeedbackMessage(latihanSusunFeedbackEl, LATIHAN_SUSUN_GUIDANCE_START);
+      showLatihanSusunFeedback("Hebat ⭐", false);
+
+      if (isLatihanSusunAdjustActive()) {
+        ensureLatihanSusunCalResizeHandle(latihanSusunFeedbackEl, "feedbackText");
+        bindLatihanSusunAdjustTarget(latihanSusunFeedbackEl, "feedbackText");
+        setLatihanSusunDebugLabels();
+      }
     }
 
     if (latihanSusunLayoutCopyBtn) {
