@@ -674,6 +674,10 @@
   const CABARAN_LEARNING_UNLOCKS_STORE = "learning_unlocks";
   /** One row per school + class + student + checkpoint; repeated Cabaran overwrites via IndexedDB put. */
   const CABARAN_SUMMARY_SYNC_MODE = "upsert";
+  const CABARAN_SYNC_SAVING_MSG = "Menyimpan keputusan...";
+  const CABARAN_SYNC_SUCCESS_MSG = "Keputusan disimpan";
+  const CABARAN_SYNC_RETRY_MSG =
+    "Internet tidak stabil. Keputusan akan cuba dihantar semula.";
   /** updatedAt = latest Cabaran completion time (ISO 8601, e.g. 2026-06-07T09:12:05.000Z). */
   const CABARAN_CORRECT_FEEDBACK = "Betul ⭐";
   const CABARAN_WRONG_FEEDBACK = "Cuba lagi 😊";
@@ -3676,6 +3680,119 @@
     });
   }
 
+  function cabaranStoreGetAll(storeName) {
+    return initCabaranDatabase().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction(storeName, "readonly");
+        const store = tx.objectStore(storeName);
+        const request = store.getAll();
+
+        request.onsuccess = function () {
+          resolve(request.result || []);
+        };
+
+        request.onerror = function () {
+          reject(request.error);
+        };
+      });
+    });
+  }
+
+  function markCabaranSummarySyncStatus(summaryKey, syncStatus) {
+    return cabaranStoreGet(CABARAN_SUMMARIES_STORE, summaryKey).then(function (record) {
+      if (!record) {
+        return null;
+      }
+
+      record.syncStatus = syncStatus;
+      return cabaranStorePut(CABARAN_SUMMARIES_STORE, record);
+    });
+  }
+
+  function getCabaranPendingSummaries() {
+    return cabaranStoreGetAll(CABARAN_SUMMARIES_STORE).then(function (records) {
+      return records.filter(function (record) {
+        const status = String(record.syncStatus || "pending").trim();
+
+        return status === "pending" || status === "failed";
+      });
+    });
+  }
+
+  async function pushCabaranSummaryToGoogleSheet(summary) {
+    const engine = window.KMJ_Assessment || window.KMJ_Pronunciation;
+
+    if (!engine || !engine.syncCabaranSummariesToGoogleSheet) {
+      return { ok: false, reason: "no_engine" };
+    }
+
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      return { ok: false, reason: "offline" };
+    }
+
+    if (engine.isSyncEndpointConfigured && !engine.isSyncEndpointConfigured()) {
+      return { ok: false, reason: "no_endpoint" };
+    }
+
+    try {
+      return await engine.syncCabaranSummariesToGoogleSheet([summary]);
+    } catch (syncError) {
+      console.warn("[Cabaran] Google Sheet sync error", syncError);
+      return {
+        ok: false,
+        reason: "error",
+        error: syncError,
+      };
+    }
+  }
+
+  async function retryPendingCabaranSummariesSync() {
+    const engine = window.KMJ_Assessment || window.KMJ_Pronunciation;
+
+    if (!engine || !engine.syncCabaranSummariesToGoogleSheet) {
+      return { ok: false, reason: "no_engine" };
+    }
+
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      return { ok: false, reason: "offline" };
+    }
+
+    if (engine.isSyncEndpointConfigured && !engine.isSyncEndpointConfigured()) {
+      return { ok: false, reason: "no_endpoint" };
+    }
+
+    const pending = await getCabaranPendingSummaries();
+
+    if (!pending.length) {
+      return { ok: true, noPending: true };
+    }
+
+    try {
+      const result = await engine.syncCabaranSummariesToGoogleSheet(pending);
+
+      if (result && result.ok) {
+        await Promise.all(
+          pending.map(function (record) {
+            return markCabaranSummarySyncStatus(record.summaryKey, "synced");
+          })
+        );
+      }
+
+      return result;
+    } catch (syncError) {
+      console.warn("[Cabaran] Pending summary sync retry error", syncError);
+      return {
+        ok: false,
+        reason: "error",
+        error: syncError,
+      };
+    }
+  }
+
+  if (!window.KMJ_retryPendingCabaranSummariesSync) {
+    window.KMJ_retryPendingCabaranSummariesSync = retryPendingCabaranSummariesSync;
+  }
+
   function buildCabaranUnlockKey(session, checkpointId) {
     return [
       normalizeCabaranIdentityText(getCabaranSchoolCode()),
@@ -5538,7 +5655,22 @@
     cabaranSummaryOverlayEl.setAttribute("aria-hidden", "true");
   }
 
-  function showCabaranSummaryOverlay(summary) {
+  function formatCabaranSummaryBody(summary, syncLine) {
+    return (
+      "Betul: " +
+      summary.totalCorrect +
+      "/" +
+      summary.totalQuestions +
+      "\nPeratus: " +
+      summary.percentage +
+      "%\nCadangan:\n" +
+      summary.suggestedTP +
+      "\n\n" +
+      String(syncLine || "")
+    );
+  }
+
+  function showCabaranSummaryOverlay(summary, syncLine) {
     if (!cabaranSummaryOverlayEl) {
       return;
     }
@@ -5551,20 +5683,23 @@
     }
 
     if (body) {
-      body.textContent =
-        "Betul: " +
-        summary.totalCorrect +
-        "/" +
-        summary.totalQuestions +
-        "\nPeratus: " +
-        summary.percentage +
-        "%\nCadangan:\n" +
-        summary.suggestedTP +
-        "\n\nKeputusan disimpan";
+      body.textContent = formatCabaranSummaryBody(summary, syncLine);
     }
 
     cabaranSummaryOverlayEl.style.display = "flex";
     cabaranSummaryOverlayEl.setAttribute("aria-hidden", "false");
+  }
+
+  function updateCabaranSummarySyncMessage(summary, syncLine) {
+    if (!cabaranSummaryOverlayEl) {
+      return;
+    }
+
+    const body = cabaranSummaryOverlayEl.querySelector("#cabaran-summary-body");
+
+    if (body) {
+      body.textContent = formatCabaranSummaryBody(summary, syncLine);
+    }
   }
 
   function finishCabaranSession() {
@@ -5588,14 +5723,36 @@
 
     console.log("[Cabaran] Session answers (memory only)", cabaranSessionAnswers);
 
-    void saveCabaranSummary(summary).catch(function (error) {
-      console.warn("[Cabaran] Summary upsert error", error);
-    });
-
     clearCabaranCountdownTimer();
     hideCabaranTimer();
-    showCabaranSummaryOverlay(summary);
+    showCabaranSummaryOverlay(summary, CABARAN_SYNC_SAVING_MSG);
     cabaranBusy = false;
+
+    void (async function () {
+      try {
+        await saveCabaranSummary(summary);
+        const syncResult = await pushCabaranSummaryToGoogleSheet(summary);
+
+        if (syncResult && syncResult.ok) {
+          await markCabaranSummarySyncStatus(summary.summaryKey, "synced");
+          updateCabaranSummarySyncMessage(summary, CABARAN_SYNC_SUCCESS_MSG);
+          return;
+        }
+
+        await markCabaranSummarySyncStatus(summary.summaryKey, "pending");
+        updateCabaranSummarySyncMessage(summary, CABARAN_SYNC_RETRY_MSG);
+      } catch (error) {
+        console.warn("[Cabaran] Summary save/sync error", error);
+
+        try {
+          await markCabaranSummarySyncStatus(summary.summaryKey, "pending");
+        } catch (markError) {
+          console.warn("[Cabaran] Summary sync status update error", markError);
+        }
+
+        updateCabaranSummarySyncMessage(summary, CABARAN_SYNC_RETRY_MSG);
+      }
+    })();
   }
 
   function openNextCabaranQuestion() {

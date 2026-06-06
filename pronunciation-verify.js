@@ -615,6 +615,114 @@
     };
   }
 
+  function cabaranSummaryToSyncPayload(summary) {
+    return {
+      schoolCode: String((summary && summary.schoolCode) || getSchoolCode() || "").trim(),
+      classId: String((summary && summary.classId) || "").trim(),
+      studentId: String((summary && summary.studentId) || "").trim(),
+      studentName: String((summary && summary.studentName) || "").trim(),
+      checkpointId: String((summary && summary.checkpointId) || "").trim(),
+      totalCorrect:
+        summary && summary.totalCorrect !== undefined && summary.totalCorrect !== null
+          ? summary.totalCorrect
+          : "",
+      totalQuestions:
+        summary &&
+        summary.totalQuestions !== undefined &&
+        summary.totalQuestions !== null
+          ? summary.totalQuestions
+          : "",
+      percentage:
+        summary && summary.percentage !== undefined && summary.percentage !== null
+          ? summary.percentage
+          : "",
+      suggestedTP: String((summary && summary.suggestedTP) || "").trim(),
+      cabaranCompleted: summary ? summary.cabaranCompleted !== false : true,
+      updatedAt: String((summary && summary.updatedAt) || new Date().toISOString()).trim(),
+    };
+  }
+
+  async function syncCabaranSummariesToGoogleSheet(summaries) {
+    if (!isSyncEndpointConfigured()) {
+      throw new Error(
+        "Sila tetapkan KMJ_SYNC_ENDPOINT dalam pronunciation-verify.js."
+      );
+    }
+
+    if (isBrowserOffline()) {
+      return { ok: false, reason: "offline" };
+    }
+
+    const records = (summaries || [])
+      .map(cabaranSummaryToSyncPayload)
+      .filter(function (record) {
+        return (
+          record.schoolCode &&
+          record.classId &&
+          record.studentId &&
+          record.checkpointId
+        );
+      });
+
+    if (!records.length) {
+      return { ok: false, reason: "empty" };
+    }
+
+    let response = null;
+    let result = null;
+    let responseText = "";
+
+    try {
+      response = await fetch(KMJ_SYNC_ENDPOINT, {
+        method: "POST",
+        redirect: "follow",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8",
+        },
+        body: JSON.stringify({
+          action: "syncCabaranSummaries",
+          records: records,
+        }),
+      });
+
+      responseText = await response.text();
+
+      try {
+        result = responseText ? JSON.parse(responseText) : {};
+        console.log("[KMJ] Cabaran summary sync response:", result);
+      } catch (parseError) {
+        console.error("[KMJ] Cabaran summary sync invalid JSON", {
+          parseError: parseError,
+          responseText: responseText,
+          status: response.status,
+        });
+        throw new Error(
+          "Respons tidak sah daripada server: " +
+            String(responseText || "").slice(0, 180)
+        );
+      }
+
+      if (!response.ok || result.success !== true) {
+        const failMessage = buildSyncErrorMessage(
+          null,
+          response,
+          responseText,
+          result
+        );
+        throw new Error(failMessage);
+      }
+
+      return {
+        ok: true,
+        inserted: result.inserted || 0,
+        updated: result.updated || 0,
+      };
+    } catch (syncError) {
+      console.error("[KMJ] Cabaran summary sync error", syncError);
+      throw syncError;
+    }
+  }
+
   async function getSyncStatusCounts() {
     const all = getLatestAttemptRecords(await getAllRecordings());
     let pendingCount = 0;
@@ -982,17 +1090,22 @@
         await initDatabase();
         const pending = await getRecordsNeedingSync();
 
-        if (!pending.length) {
-          notifySyncStatusChanged();
-          return;
+        if (pending.length) {
+          await syncPendingResultsToGoogleSheet();
         }
-
-        await syncPendingResultsToGoogleSheet();
       } catch (retryError) {
         log("Pending sync retry skipped", retryError);
-      } finally {
-        notifySyncStatusChanged();
       }
+
+      if (typeof global.KMJ_retryPendingCabaranSummariesSync === "function") {
+        try {
+          await global.KMJ_retryPendingCabaranSummariesSync();
+        } catch (cabaranRetryError) {
+          log("Cabaran summary sync retry skipped", cabaranRetryError);
+        }
+      }
+
+      notifySyncStatusChanged();
     }
 
     global.addEventListener("online", function () {
@@ -3629,6 +3742,8 @@
     getSyncStatusCounts: getSyncStatusCounts,
     getRecordsNeedingSync: getRecordsNeedingSync,
     syncPendingResultsToGoogleSheet: syncPendingResultsToGoogleSheet,
+    cabaranSummaryToSyncPayload: cabaranSummaryToSyncPayload,
+    syncCabaranSummariesToGoogleSheet: syncCabaranSummariesToGoogleSheet,
     tryAutoSyncAfterAssessment: tryAutoSyncAfterAssessment,
     getStudentSyncStatusSummary: getStudentSyncStatusSummary,
     isGoogleSheetSyncInProgress: isGoogleSheetSyncInProgress,

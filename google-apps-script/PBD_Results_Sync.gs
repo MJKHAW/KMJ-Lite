@@ -3,13 +3,17 @@
  *
  * Sheets:
  * - PBD_Results (assessment sync, latest-only upsert)
+ * - Cabaran_Results (Cabaran summary upsert, one row per student/checkpoint)
  * - Licenses (commercial activation)
  *
  * PBD_Results unique key (latest attempt per student/question):
  *   schoolCode + classId + studentId + checkpointId + targetText
  *
+ * Cabaran_Results unique key (latest Cabaran per student/checkpoint):
+ *   schoolCode + classId + studentId + checkpointId
+ *
  * Setup:
- * 1. Create a Google Sheet with tabs PBD_Results and Licenses.
+ * 1. Create a Google Sheet with tabs PBD_Results, Cabaran_Results, and Licenses.
  * 2. Extensions → Apps Script → paste this file.
  * 3. Deploy → New deployment → Web app
  *    - Execute as: Me
@@ -19,6 +23,7 @@
  */
 
 var PBD_RESULTS_SHEET_NAME = "PBD_Results";
+var CABARAN_RESULTS_SHEET_NAME = "Cabaran_Results";
 var LICENSES_SHEET_NAME = "Licenses";
 var STUDENT_ROSTER_SHEET_NAME = "Student_Roster";
 
@@ -53,6 +58,21 @@ var PBD_RESULTS_HEADERS = [
   "syncedAt",
 ];
 
+var CABARAN_RESULTS_HEADERS = [
+  "schoolCode",
+  "classId",
+  "studentId",
+  "studentName",
+  "checkpointId",
+  "totalCorrect",
+  "totalQuestions",
+  "percentage",
+  "suggestedTP",
+  "cabaranCompleted",
+  "updatedAt",
+  "syncedAt",
+];
+
 var STUDENT_ROSTER_HEADERS = [
   "SchoolCode",
   "ClassId",
@@ -83,6 +103,10 @@ function doPost(e) {
 
     if (body.action === "getRoster") {
       return getRoster_(body);
+    }
+
+    if (body.action === "syncCabaranSummaries") {
+      return syncCabaranSummaries_(body);
     }
 
     var records = body.records;
@@ -141,7 +165,7 @@ function doGet() {
   return jsonResponse_({
     success: true,
     message:
-      "KMJ-Lite endpoint is ready (PBD_Results latest-key sync + validateLicense + roster sync).",
+      "KMJ-Lite endpoint is ready (PBD_Results + Cabaran_Results upsert + validateLicense + roster sync).",
   });
 }
 
@@ -679,6 +703,198 @@ function rowValuesFromRecord_(row, syncedAt) {
     row.timestamp || "",
     syncedAt,
   ];
+}
+
+function buildCabaranSummarySyncKey_(schoolCode, classId, studentId, checkpointId) {
+  var parts = [
+    normalizeKeyPart_(schoolCode),
+    normalizeKeyPart_(classId),
+    normalizeKeyPart_(studentId),
+    normalizeKeyPart_(checkpointId),
+  ];
+  var i;
+
+  for (i = 0; i < parts.length; i += 1) {
+    if (!parts[i]) {
+      return "";
+    }
+  }
+
+  return parts.join("|");
+}
+
+function buildCabaranSummarySyncKeyFromPayload_(row) {
+  return buildCabaranSummarySyncKey_(
+    row.schoolCode,
+    row.classId,
+    row.studentId,
+    row.checkpointId
+  );
+}
+
+function buildCabaranSummarySyncKeyFromSheetRow_(rowValues) {
+  if (!rowValues || !rowValues.length) {
+    return "";
+  }
+
+  return buildCabaranSummarySyncKey_(
+    rowValues[0],
+    rowValues[1],
+    rowValues[2],
+    rowValues[4]
+  );
+}
+
+function cabaranSummaryTimestampMs_(rowValues) {
+  var ts = String((rowValues && rowValues[10]) || "").trim();
+  var syncedAt = String((rowValues && rowValues[11]) || "").trim();
+  var parsed = Date.parse(ts || syncedAt);
+
+  if (isNaN(parsed)) {
+    return 0;
+  }
+
+  return parsed;
+}
+
+function buildCabaranSummaryKeyRowMap_(sheet) {
+  var map = {};
+  var lastRow = sheet.getLastRow();
+  var values;
+  var i;
+  var rowValues;
+  var summaryKey;
+  var sheetRow;
+  var existingRow;
+  var existingValues;
+
+  if (lastRow < 2) {
+    return map;
+  }
+
+  values = sheet.getRange(2, 1, lastRow, CABARAN_RESULTS_HEADERS.length).getValues();
+
+  for (i = 0; i < values.length; i += 1) {
+    rowValues = values[i];
+    summaryKey = buildCabaranSummarySyncKeyFromSheetRow_(rowValues);
+
+    if (!summaryKey) {
+      continue;
+    }
+
+    sheetRow = i + 2;
+    existingRow = map[summaryKey];
+
+    if (!existingRow) {
+      map[summaryKey] = sheetRow;
+      continue;
+    }
+
+    existingValues = values[existingRow - 2];
+
+    if (cabaranSummaryTimestampMs_(rowValues) >= cabaranSummaryTimestampMs_(existingValues)) {
+      map[summaryKey] = sheetRow;
+    }
+  }
+
+  return map;
+}
+
+function removeDuplicateCabaranSummaryRows_(sheet, summaryKey, keepRow) {
+  var lastRow = sheet.getLastRow();
+  var values;
+  var i;
+  var sheetRow;
+  var rowsToDelete = [];
+
+  if (lastRow < 2 || !summaryKey || !keepRow) {
+    return;
+  }
+
+  values = sheet.getRange(2, 1, lastRow, CABARAN_RESULTS_HEADERS.length).getValues();
+
+  for (i = 0; i < values.length; i += 1) {
+    sheetRow = i + 2;
+
+    if (sheetRow === keepRow) {
+      continue;
+    }
+
+    if (buildCabaranSummarySyncKeyFromSheetRow_(values[i]) === summaryKey) {
+      rowsToDelete.push(sheetRow);
+    }
+  }
+
+  rowsToDelete.sort(function (a, b) {
+    return b - a;
+  });
+
+  for (i = 0; i < rowsToDelete.length; i += 1) {
+    sheet.deleteRow(rowsToDelete[i]);
+  }
+}
+
+function cabaranSummaryRowValuesFromRecord_(row, syncedAt) {
+  return [
+    row.schoolCode || "",
+    row.classId || "",
+    row.studentId || "",
+    row.studentName || "",
+    row.checkpointId || "",
+    row.totalCorrect !== undefined && row.totalCorrect !== null ? row.totalCorrect : "",
+    row.totalQuestions !== undefined && row.totalQuestions !== null ? row.totalQuestions : "",
+    row.percentage !== undefined && row.percentage !== null ? row.percentage : "",
+    row.suggestedTP || "",
+    row.cabaranCompleted === false ? false : true,
+    row.updatedAt || "",
+    syncedAt,
+  ];
+}
+
+function syncCabaranSummaries_(body) {
+  var records = (body && body.records) || [];
+  var sheet = getOrCreateSheet_(CABARAN_RESULTS_SHEET_NAME);
+  var syncedAt = new Date().toISOString();
+  var keyIndex = buildCabaranSummaryKeyRowMap_(sheet);
+  var inserted = 0;
+  var updated = 0;
+  var i;
+  var row;
+  var summaryKey;
+  var rowValues;
+  var targetRow;
+
+  ensureHeaders_(sheet, CABARAN_RESULTS_HEADERS);
+
+  for (i = 0; i < records.length; i += 1) {
+    row = records[i] || {};
+    summaryKey = buildCabaranSummarySyncKeyFromPayload_(row);
+
+    if (!summaryKey) {
+      continue;
+    }
+
+    rowValues = cabaranSummaryRowValuesFromRecord_(row, syncedAt);
+    targetRow = keyIndex[summaryKey];
+
+    if (targetRow) {
+      sheet
+        .getRange(targetRow, 1, 1, CABARAN_RESULTS_HEADERS.length)
+        .setValues([rowValues]);
+      removeDuplicateCabaranSummaryRows_(sheet, summaryKey, targetRow);
+      updated += 1;
+    } else {
+      sheet.appendRow(rowValues);
+      keyIndex[summaryKey] = sheet.getLastRow();
+      inserted += 1;
+    }
+  }
+
+  return jsonResponse_({
+    success: true,
+    inserted: inserted,
+    updated: updated,
+  });
 }
 
 function getOrCreateSheet_(name) {
