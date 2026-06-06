@@ -38,10 +38,10 @@
     instructionText: { left: 12, top: 33, width: 76, height: 5 },
     blankQuestion: { left: 11.6, top: 39.4, width: 77, height: 12.8 },
     audioVisual: { left: 40, top: 40, width: 20, height: 10 },
-    answerA: { left: 12.4, top: 57.9, width: 24, height: 11 },
+    answerA: { left: 12.6, top: 57.9, width: 24, height: 11 },
     answerB: { left: 38.6, top: 57.9, width: 24, height: 11 },
     answerC: { left: 64.4, top: 57.9, width: 24, height: 11 },
-    feedbackText: { left: 26.2, top: 72.9, width: 48, height: 6, fontSize: 2.6 },
+    feedbackText: { left: 27, top: 71.5, width: 48, height: 6, fontSize: 2.6 },
     targetWord: { left: 12, top: 40, width: 76, height: 10 },
     susunAnswer: { left: 10, top: 46, width: 80, height: 12 },
     susunDrag: { left: 10.4, top: 59.9, width: 80, height: 12 },
@@ -50,6 +50,7 @@
     typingSubmit: { left: 76.2, top: 68.6, width: 14.2, height: 7.8, fontSize: 4.2 },
   };
   
+
   
   const CABARAN_OVERLAY_LAYOUT_DEFAULT = JSON.parse(
     JSON.stringify(CABARAN_OVERLAY_LAYOUT)
@@ -3911,6 +3912,22 @@
     });
 
     raiseCabaranButtonHotspots();
+    syncCabaranUlangButtonState();
+  }
+
+  function syncCabaranUlangButtonState() {
+    const btn = cabaranButtonHotspotEls.ulangButton;
+
+    if (!btn) {
+      return;
+    }
+
+    const hideUlang = getCabaranQuestionMode() === "sebut";
+
+    btn.style.display = hideUlang ? "none" : "flex";
+    btn.style.pointerEvents = hideUlang ? "none" : "auto";
+    btn.disabled = hideUlang;
+    btn.setAttribute("aria-hidden", hideUlang ? "true" : "false");
   }
 
   function createCabaranButtonHotspots(section) {
@@ -3968,6 +3985,10 @@
         }
 
         if (config.action === "cabaran-ulang") {
+          if (getCabaranQuestionMode() === "sebut") {
+            return;
+          }
+
           replayCabaranQuestionAudioOnly();
         }
       });
@@ -4012,6 +4033,21 @@
       cabaranFeedback.style.justifyContent = "center";
       cabaranFeedback.style.textAlign = "center";
       cabaranFeedback.style.background = "transparent";
+      applyCabaranFeedbackFontSize();
+
+      if (DEBUG_CABARAN_LAYOUT && getCabaranQuestionMode() === "sebut") {
+        cabaranFeedback.style.whiteSpace = "pre-line";
+
+        if (
+          !cabaranFeedback.textContent ||
+          cabaranFeedback.style.opacity === "0"
+        ) {
+          showPronunciationFeedbackMessage(
+            cabaranFeedback,
+            "Betul ⭐\nGoogle dengar: buku"
+          );
+        }
+      }
     }
 
     if (cabaranTimerEl && L.timerBox) {
@@ -4832,6 +4868,26 @@
     cabaranTimerEl.style.fontSize = String(fontSize);
   }
 
+  function applyCabaranFeedbackFontSize() {
+    if (!cabaranFeedback || !CABARAN_OVERLAY_LAYOUT.feedbackText) {
+      return;
+    }
+
+    const fontSize = CABARAN_OVERLAY_LAYOUT.feedbackText.fontSize;
+
+    if (fontSize == null) {
+      return;
+    }
+
+    if (typeof fontSize === "number") {
+      cabaranFeedback.style.fontSize =
+        "clamp(0.9rem, " + fontSize + "vmin, 2.2rem)";
+      return;
+    }
+
+    cabaranFeedback.style.fontSize = String(fontSize);
+  }
+
   function applyCabaranTypingInputFontSize() {
     if (!cabaranTypeInputEl || !CABARAN_OVERLAY_LAYOUT.typingInput) {
       return;
@@ -5038,6 +5094,39 @@
     cabaranTimerEl.style.display = "flex";
     cabaranTimerEl.setAttribute("aria-hidden", "false");
     renderCabaranTimerDisplay(seconds);
+  }
+
+  function getCabaranSebutSpeechTimerSeconds() {
+    return Math.max(1, Math.ceil(CABARAN_SPEECH_TIMEOUT_MS / 1000));
+  }
+
+  function stopCabaranSebutSpeechTimer() {
+    clearCabaranCountdownTimer();
+    hideCabaranTimer();
+  }
+
+  function startCabaranSebutSpeechTimer() {
+    clearCabaranCountdownTimer();
+
+    cabaranCountdownSeconds = getCabaranSebutSpeechTimerSeconds();
+    showCabaranTimer(cabaranCountdownSeconds);
+
+    cabaranCountdownInterval = window.setInterval(function () {
+      if (activeScreen !== "cabaran" || getCabaranQuestionMode() !== "sebut") {
+        stopCabaranSebutSpeechTimer();
+        return;
+      }
+
+      cabaranCountdownSeconds -= 1;
+
+      if (cabaranCountdownSeconds <= 0) {
+        clearCabaranCountdownTimer();
+        renderCabaranTimerDisplay(0);
+        return;
+      }
+
+      showCabaranTimer(cabaranCountdownSeconds);
+    }, 1000);
   }
 
   function startCabaranCountdown() {
@@ -5261,6 +5350,7 @@
         "cabaran-feedback--wrong"
       );
       cabaranFeedback.style.animation = "none";
+      applyCabaranFeedbackFontSize();
     }
 
     showPronunciationFeedbackMessage(cabaranFeedback, message);
@@ -5384,6 +5474,7 @@
 
         settled = true;
         window.clearTimeout(timer);
+        stopCabaranSebutSpeechTimer();
         cabaranActiveRecognition = null;
         recognition.onresult = null;
         recognition.onerror = null;
@@ -5467,6 +5558,7 @@
       }, timeoutMs);
 
       try {
+        startCabaranSebutSpeechTimer();
         recognition.start();
       } catch (startError) {
         finish({
@@ -5596,6 +5688,8 @@
     if (cabaranSusunDragEl) {
       cabaranSusunDragEl.style.display = isSusun ? "flex" : "none";
     }
+
+    syncCabaranUlangButtonState();
   }
 
   function getCabaranSusunPlacedOrder() {
@@ -5950,9 +6044,8 @@
     applyCabaranOverlayLayout();
     clearCabaranCountdownTimer();
     hideCabaranTimer();
-    playCabaranTargetAudio(function () {
-      void runCabaranSebutAuto();
-    });
+    stopBelajarAudio();
+    void runCabaranSebutAuto();
   }
 
   function renderCabaranSusunRound() {
@@ -6101,6 +6194,7 @@
 
     if (activeScreen !== "cabaran") {
       cabaranBusy = false;
+      stopCabaranSebutSpeechTimer();
       return;
     }
 
@@ -6481,7 +6575,15 @@
   }
 
   function replayCabaranQuestionAudioOnly() {
-    if (cabaranBusy || cabaranQuestionNum > CABARAN_TOTAL_QUESTIONS) {
+    if (cabaranQuestionNum > CABARAN_TOTAL_QUESTIONS) {
+      return;
+    }
+
+    if (getCabaranQuestionMode() === "sebut") {
+      return;
+    }
+
+    if (cabaranBusy) {
       return;
     }
 
@@ -11252,6 +11354,10 @@
     }
 
     if (action === "cabaran-ulang") {
+      if (getCabaranQuestionMode() === "sebut") {
+        return;
+      }
+
       replayCabaranQuestionAudioOnly();
       return;
     }

@@ -107,14 +107,13 @@ body.debug-hotspots .hotspot {
   box-sizing: border-box;
 }
 
-/* Cabaran feedback — boxless text (Betul ⭐ / Cuba lagi 😊) */
+/* Cabaran feedback — boxless text (Betul ⭐ / Cuba lagi 😊); size via feedbackText.fontSize */
 #cabaran-feedback {
   background: transparent !important;
   border: none !important;
   border-radius: 0 !important;
   box-shadow: none !important;
   padding: 0 !important;
-  font-size: clamp(1.4rem, 5.5vw, 2.1rem) !important;
   font-weight: 800 !important;
   color: #2a1f14 !important;
   text-shadow:
@@ -122,6 +121,12 @@ body.debug-hotspots .hotspot {
     0 0 14px rgba(255, 255, 255, 0.75),
     0 2px 4px rgba(0, 0, 0, 0.35),
     0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+#screen-cabaran.debug-cabaran-layout #cabaran-feedback.cabaran-feedback--correct,
+#screen-cabaran.debug-cabaran-layout #cabaran-feedback.cabaran-feedback--wrong {
+  animation: none !important;
+  transform: none !important;
 }
 
 @keyframes cabaran-feedback-correct {
