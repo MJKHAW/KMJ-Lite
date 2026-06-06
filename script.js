@@ -717,6 +717,8 @@
   let cabaranCorrectCount = 0;
   let cabaranSessionAnswers = [];
   let cabaranChoiceCorrectIndex = -1;
+  let cabaranTwoStepPhase = 0;
+  let cabaranTwoStepStep1Correct = false;
   let cabaranQuestionLocked = false;
   let cabaranBusy = false;
   let cabaranAdvanceTimer = null;
@@ -3881,7 +3883,9 @@
   function raiseCabaranChoiceAnswers() {
     const section = document.getElementById("screen-cabaran");
 
-    if (!section || getCabaranQuestionMode() !== "choice") {
+    const mode = getCabaranQuestionMode();
+
+    if (!section || (mode !== "choice" && mode !== "twoStepChoice")) {
       return;
     }
 
@@ -4559,6 +4563,137 @@
     };
   }
 
+  function buildCabaranVkvTwoStepChoiceRound(word) {
+    const w = String(word || "").trim().toLowerCase();
+    const vowels = BELAJAR_CONTENT.vokal;
+    const first = w.charAt(0);
+    const suffix = w.slice(1);
+
+    if (!w || vowels.indexOf(first) < 0 || !suffix) {
+      return null;
+    }
+
+    const step1Options = shuffleArray(
+      [first].concat(
+        shuffleArray(
+          vowels.filter(function (v) {
+            return v !== first;
+          })
+        ).slice(0, 2)
+      )
+    );
+
+    const taughtSyllables = getCabaranTaughtSyllablePool();
+    let step2Pool = taughtSyllables.filter(function (s) {
+      return s !== suffix && s.length === suffix.length;
+    });
+
+    if (step2Pool.length < 2) {
+      step2Pool = taughtSyllables.filter(function (s) {
+        return s !== suffix;
+      });
+    }
+
+    const step2Options = shuffleArray(
+      [suffix].concat(shuffleArray(step2Pool).slice(0, 2))
+    );
+
+    return {
+      audioWord: w,
+      audioFolder: "perkataan_vkv",
+      questionMode: "twoStepChoice",
+      showBlank: true,
+      steps: [
+        {
+          prefix: "",
+          suffix: suffix,
+          correctAnswer: first,
+          options: step1Options,
+          correctIndex: step1Options.indexOf(first),
+        },
+        {
+          prefix: first,
+          suffix: "",
+          correctAnswer: suffix,
+          options: step2Options,
+          correctIndex: step2Options.indexOf(suffix),
+        },
+      ],
+    };
+  }
+
+  function buildCabaranVkvTypeRound(word) {
+    const w = String(word || "").trim().toLowerCase();
+    const prefix = w.charAt(0);
+    const correctAnswer = w.slice(1);
+
+    if (!w || !correctAnswer) {
+      return null;
+    }
+
+    return {
+      audioWord: w,
+      audioFolder: "perkataan_vkv",
+      prefix: prefix,
+      suffix: "",
+      correctAnswer: correctAnswer,
+      showBlank: true,
+      questionMode: "type",
+    };
+  }
+
+  function buildCabaranVkvQuestionSequence(total) {
+    const sebutWords = buildPracticeSequence(
+      BELAJAR_CONTENT.perkataan_vkv.slice(),
+      CABARAN_SHORT_EASY_COUNT
+    );
+    const choiceWords = buildPracticeSequence(
+      BELAJAR_CONTENT.perkataan_vkv.slice(),
+      CABARAN_SHORT_MEDIUM_COUNT
+    );
+    const typeWords = buildPracticeSequence(
+      BELAJAR_CONTENT.perkataan_vkv.slice(),
+      CABARAN_SHORT_HARD_COUNT
+    );
+    const rounds = [];
+
+    sebutWords.forEach(function (word) {
+      rounds.push({
+        audioWord: String(word || "").trim().toLowerCase(),
+        audioFolder: "perkataan_vkv",
+        questionMode: "sebut",
+      });
+    });
+
+    choiceWords.forEach(function (word) {
+      const round = buildCabaranVkvTwoStepChoiceRound(word);
+
+      if (round) {
+        rounds.push(round);
+      }
+    });
+
+    typeWords.forEach(function (word) {
+      const round = buildCabaranVkvTypeRound(word);
+
+      if (round) {
+        rounds.push(round);
+      }
+    });
+
+    while (rounds.length < total) {
+      rounds.push({
+        audioWord: String(BELAJAR_CONTENT.perkataan_vkv[0] || "ibu")
+          .trim()
+          .toLowerCase(),
+        audioFolder: "perkataan_vkv",
+        questionMode: "sebut",
+      });
+    }
+
+    return rounds.slice(0, total);
+  }
+
   function buildCabaranSukuKataQuestionSequence(total) {
     const syllableItems = buildPracticeSequence(
       getCabaranTaughtSyllablePool(),
@@ -4674,6 +4809,13 @@
       return;
     }
 
+    if (selectedCheckpoint === "perkataan_vkv") {
+      cabaranQuestionItems = buildCabaranVkvQuestionSequence(
+        CABARAN_TOTAL_QUESTIONS
+      );
+      return;
+    }
+
     const pool = getLatihanPracticePool();
 
     if (!pool.length) {
@@ -4781,6 +4923,30 @@
       }
     }
 
+    const currentRound = getCabaranCurrentRound();
+
+    if (
+      currentRound &&
+      currentRound.questionMode === "twoStepChoice" &&
+      currentRound.steps
+    ) {
+      const step = currentRound.steps[cabaranTwoStepPhase];
+
+      if (step) {
+        return {
+          audioWord: currentRound.audioWord,
+          audioFolder: currentRound.audioFolder,
+          prefix: step.prefix,
+          suffix: step.suffix,
+          correctAnswer: step.correctAnswer,
+          options: step.options,
+          correctIndex: step.correctIndex,
+          showBlank: true,
+          questionMode: "twoStepChoice",
+        };
+      }
+    }
+
     const correctAnswer = getCabaranTargetItem();
     const pool = getLatihanPracticePool().filter(function (item) {
       return item !== correctAnswer;
@@ -4827,7 +4993,7 @@
   function getCabaranCountdownDuration() {
     const mode = getCabaranQuestionMode();
 
-    if (mode === "choice") {
+    if (mode === "choice" || mode === "twoStepChoice") {
       return CABARAN_CHOICE_COUNTDOWN_SEC;
     }
 
@@ -5171,7 +5337,12 @@
 
     const mode = getCabaranQuestionMode();
 
-    if (mode !== "choice" && mode !== "susun" && mode !== "type") {
+    if (
+      mode !== "choice" &&
+      mode !== "twoStepChoice" &&
+      mode !== "susun" &&
+      mode !== "type"
+    ) {
       return;
     }
 
@@ -5180,7 +5351,24 @@
 
     showCabaranFeedbackMessage(CABARAN_WRONG_FEEDBACK);
 
-    if (mode === "choice") {
+    if (mode === "twoStepChoice") {
+      cabaranAnswerBtns.forEach(function (btn) {
+        btn.disabled = true;
+      });
+
+      if (cabaranTwoStepPhase === 0) {
+        scheduleCabaranTwoStepAdvance();
+        return;
+      }
+
+      rememberCabaranAnswer({
+        targetText: targetText,
+        answer: "",
+        transcript: "",
+        confidence: "",
+        isCorrect: false,
+      });
+    } else if (mode === "choice") {
       cabaranAnswerBtns.forEach(function (btn) {
         btn.disabled = true;
       });
@@ -5314,7 +5502,20 @@
 
     cabaranQuestionNum += 1;
     cabaranQuestionLocked = false;
+    cabaranTwoStepPhase = 0;
+    cabaranTwoStepStep1Correct = false;
     renderCabaranRound();
+  }
+
+  function scheduleCabaranTwoStepAdvance() {
+    clearCabaranAdvanceTimer();
+    cabaranAdvanceTimer = window.setTimeout(function () {
+      cabaranAdvanceTimer = null;
+      clearCabaranFeedback();
+      cabaranTwoStepPhase = 1;
+      cabaranQuestionLocked = false;
+      renderCabaranTwoStepChoicePhase();
+    }, 1400);
   }
 
   function scheduleCabaranAdvance() {
@@ -5635,16 +5836,24 @@
   }
 
   function setCabaranModeUi(mode) {
-    const isChoice = mode === "choice";
+    const isTwoStepChoice = mode === "twoStepChoice";
+    const isChoice = mode === "choice" || isTwoStepChoice;
     const isSebut = mode === "sebut";
     const isSusun = mode === "susun";
     const isType = mode === "type";
     const round = getCabaranCurrentRound();
     const showBlank =
-      (isChoice && isCabaranChoiceCheckpoint() && round && round.showBlank) ||
+      (mode === "choice" &&
+        isCabaranChoiceCheckpoint() &&
+        round &&
+        round.showBlank) ||
+      (isTwoStepChoice && round && round.showBlank) ||
       (isType && round && round.showBlank);
     const showAudioVisual =
-      isChoice && isCabaranChoiceCheckpoint() && round && !round.showBlank;
+      mode === "choice" &&
+      isCabaranChoiceCheckpoint() &&
+      round &&
+      !round.showBlank;
 
     cabaranAnswerBtns.forEach(function (btn) {
       btn.style.display = isChoice ? "flex" : "none";
@@ -5997,6 +6206,35 @@
     focusCabaranTypeInputIfSafe();
   }
 
+  function renderCabaranTwoStepChoicePhase() {
+    const round = buildCabaranChoiceRound();
+    cabaranChoiceCorrectIndex = round.correctIndex;
+    cabaranQuestionLocked = false;
+
+    if (cabaranQuestionEl) {
+      cabaranQuestionEl.textContent = getCabaranQuestionInstruction();
+    }
+
+    renderCabaranBlankQuestion(round);
+
+    cabaranAnswerBtns.forEach(function (btn, index) {
+      btn.textContent = round.options[index] || "";
+      btn.disabled = false;
+      btn.style.opacity = "1";
+    });
+
+    setCabaranModeUi("twoStepChoice");
+    applyCabaranOverlayLayout();
+    startCabaranCountdown();
+  }
+
+  function renderCabaranTwoStepChoiceRound() {
+    cabaranTwoStepPhase = 0;
+    cabaranTwoStepStep1Correct = false;
+    renderCabaranTwoStepChoicePhase();
+    playCabaranTargetAudio();
+  }
+
   function renderCabaranChoiceRound() {
     const round = buildCabaranChoiceRound();
     cabaranChoiceCorrectIndex = round.correctIndex;
@@ -6076,6 +6314,11 @@
 
     const mode = getCabaranQuestionMode();
 
+    if (mode === "twoStepChoice") {
+      renderCabaranTwoStepChoiceRound();
+      return;
+    }
+
     if (mode === "choice") {
       renderCabaranChoiceRound();
       return;
@@ -6105,7 +6348,7 @@
 
     const mode = getCabaranQuestionMode();
 
-    if (mode === "choice") {
+    if (mode === "choice" || mode === "twoStepChoice") {
       cabaranQuestionLocked = false;
       playCabaranTargetAudio();
       return;
@@ -6123,6 +6366,64 @@
     playCabaranTargetAudio();
   }
 
+  function handleCabaranTwoStepChoiceAnswer(index) {
+    clearCabaranCountdownTimer();
+    cabaranQuestionLocked = true;
+    const isCorrect = index === cabaranChoiceCorrectIndex;
+    const targetText = getCabaranTargetItem();
+    const answer = cabaranAnswerBtns[index]
+      ? cabaranAnswerBtns[index].textContent
+      : "";
+
+    if (cabaranTwoStepPhase === 0) {
+      cabaranTwoStepStep1Correct = isCorrect;
+      showCabaranFeedbackMessage(
+        isCorrect ? CABARAN_CORRECT_FEEDBACK : CABARAN_WRONG_FEEDBACK
+      );
+
+      cabaranAnswerBtns.forEach(function (btn, btnIndex) {
+        btn.disabled = true;
+
+        if (btnIndex === cabaranChoiceCorrectIndex) {
+          btn.style.opacity = "1";
+        } else if (btnIndex === index && !isCorrect) {
+          btn.style.opacity = "0.55";
+        }
+      });
+
+      scheduleCabaranTwoStepAdvance();
+      return;
+    }
+
+    const bothCorrect = cabaranTwoStepStep1Correct && isCorrect;
+
+    if (bothCorrect) {
+      cabaranCorrectCount += 1;
+      showCabaranFeedbackMessage(CABARAN_CORRECT_FEEDBACK);
+    } else {
+      showCabaranFeedbackMessage(CABARAN_WRONG_FEEDBACK);
+    }
+
+    cabaranAnswerBtns.forEach(function (btn, btnIndex) {
+      btn.disabled = true;
+
+      if (btnIndex === cabaranChoiceCorrectIndex) {
+        btn.style.opacity = "1";
+      } else if (btnIndex === index && !isCorrect) {
+        btn.style.opacity = "0.55";
+      }
+    });
+
+    rememberCabaranAnswer({
+      targetText: targetText,
+      answer: answer,
+      transcript: "",
+      confidence: "",
+      isCorrect: bothCorrect,
+    });
+    scheduleCabaranAdvance();
+  }
+
   function handleCabaranChoiceAnswer(index) {
     if (
       cabaranQuestionLocked ||
@@ -6131,6 +6432,13 @@
       index < 0 ||
       index >= cabaranAnswerBtns.length
     ) {
+      return;
+    }
+
+    const round = getCabaranCurrentRound();
+
+    if (round && round.questionMode === "twoStepChoice") {
+      handleCabaranTwoStepChoiceAnswer(index);
       return;
     }
 
