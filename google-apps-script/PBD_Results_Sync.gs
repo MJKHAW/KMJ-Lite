@@ -12,6 +12,10 @@
  * Cabaran_Results unique key (latest Cabaran per student/checkpoint):
  *   schoolCode + classId + studentId + checkpointId
  *
+ * Cabaran_Research (action research: first attempt vs latest attempt):
+ *   same key — first* columns are written once and never changed;
+ *   latest* columns update on every sync; improvementPercentage = latest - first.
+ *
  * Setup:
  * 1. Create a Google Sheet with tabs PBD_Results, Cabaran_Results, and Licenses.
  * 2. Extensions → Apps Script → paste this file.
@@ -24,6 +28,7 @@
 
 var PBD_RESULTS_SHEET_NAME = "PBD_Results";
 var CABARAN_RESULTS_SHEET_NAME = "Cabaran_Results";
+var CABARAN_RESEARCH_SHEET_NAME = "Cabaran_Research";
 var LICENSES_SHEET_NAME = "Licenses";
 var STUDENT_ROSTER_SHEET_NAME = "Student_Roster";
 
@@ -71,6 +76,25 @@ var CABARAN_RESULTS_HEADERS = [
   "cabaranCompleted",
   "updatedAt",
   "syncedAt",
+];
+
+var CABARAN_RESEARCH_HEADERS = [
+  "schoolCode",
+  "classId",
+  "studentId",
+  "studentName",
+  "checkpointId",
+  "firstCorrect",
+  "firstTotal",
+  "firstPercentage",
+  "firstSuggestedTP",
+  "firstDate",
+  "latestCorrect",
+  "latestTotal",
+  "latestPercentage",
+  "latestSuggestedTP",
+  "latestDate",
+  "improvementPercentage",
 ];
 
 var STUDENT_ROSTER_HEADERS = [
@@ -890,11 +914,139 @@ function syncCabaranSummaries_(body) {
     }
   }
 
+  var research = upsertCabaranResearch_(records, syncedAt);
+
   return jsonResponse_({
     success: true,
     inserted: inserted,
     updated: updated,
+    researchInserted: research.inserted,
+    researchUpdated: research.updated,
   });
+}
+
+function buildCabaranResearchKeyRowMap_(sheet) {
+  var map = {};
+  var lastRow = sheet.getLastRow();
+  var values;
+  var i;
+  var key;
+
+  if (lastRow < 2) {
+    return map;
+  }
+
+  values = sheet.getRange(2, 1, lastRow - 1, CABARAN_RESEARCH_HEADERS.length).getValues();
+
+  for (i = 0; i < values.length; i += 1) {
+    key = buildCabaranSummarySyncKey_(
+      values[i][0],
+      values[i][1],
+      values[i][2],
+      values[i][4]
+    );
+
+    if (key && !map[key]) {
+      map[key] = i + 2;
+    }
+  }
+
+  return map;
+}
+
+function cabaranNumberOrEmpty_(value) {
+  return value !== undefined && value !== null && value !== "" ? Number(value) : "";
+}
+
+function formatImprovement_(firstPercentage, latestPercentage) {
+  var first = Number(firstPercentage);
+  var latest = Number(latestPercentage);
+
+  if (isNaN(first) || isNaN(latest)) {
+    return "";
+  }
+
+  var diff = latest - first;
+  return diff > 0 ? "+" + diff : String(diff);
+}
+
+function upsertCabaranResearch_(records, syncedAt) {
+  var sheet = getOrCreateSheet_(CABARAN_RESEARCH_SHEET_NAME);
+  ensureHeaders_(sheet, CABARAN_RESEARCH_HEADERS);
+
+  var keyIndex = buildCabaranResearchKeyRowMap_(sheet);
+  var inserted = 0;
+  var updated = 0;
+  var i;
+  var row;
+  var key;
+  var targetRow;
+  var attemptDate;
+  var correct;
+  var total;
+  var percentage;
+  var suggestedTP;
+  var firstPercentage;
+
+  for (i = 0; i < records.length; i += 1) {
+    row = records[i] || {};
+
+    if (row.cabaranCompleted === false) {
+      continue;
+    }
+
+    key = buildCabaranSummarySyncKeyFromPayload_(row);
+
+    if (!key) {
+      continue;
+    }
+
+    attemptDate = String(row.updatedAt || "").trim() || syncedAt;
+    correct = cabaranNumberOrEmpty_(row.totalCorrect);
+    total = cabaranNumberOrEmpty_(row.totalQuestions);
+    percentage = cabaranNumberOrEmpty_(row.percentage);
+    suggestedTP = row.suggestedTP || "";
+    targetRow = keyIndex[key];
+
+    if (targetRow) {
+      // Existing row: first* columns (6-10) are never touched.
+      firstPercentage = sheet.getRange(targetRow, 8).getValue();
+      sheet.getRange(targetRow, 11, 1, 6).setValues([
+        [
+          correct,
+          total,
+          percentage,
+          suggestedTP,
+          attemptDate,
+          formatImprovement_(firstPercentage, percentage),
+        ],
+      ]);
+      updated += 1;
+    } else {
+      sheet.appendRow([
+        row.schoolCode || "",
+        row.classId || "",
+        row.studentId || "",
+        row.studentName || "",
+        row.checkpointId || "",
+        correct,
+        total,
+        percentage,
+        suggestedTP,
+        attemptDate,
+        correct,
+        total,
+        percentage,
+        suggestedTP,
+        attemptDate,
+        formatImprovement_(percentage, percentage),
+      ]);
+      keyIndex[key] = sheet.getLastRow();
+      inserted += 1;
+    }
+  }
+
+  return { inserted: inserted, updated: updated };
 }
 
 function getOrCreateSheet_(name) {
