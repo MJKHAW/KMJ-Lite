@@ -742,6 +742,7 @@
   let teacherLicenseOverlay = null;
   let teacherDashboardOverlay = null;
   let teacherDashboardListEl = null;
+  let teacherCabaranPbdListEl = null;
   let teacherRosterPanelEl = null;
   let teacherRosterTableBody = null;
   let teacherRosterCountEl = null;
@@ -10252,6 +10253,111 @@
     });
   }
 
+  function formatCabaranPbdCell(value) {
+    if (value === undefined || value === null || value === "") {
+      return "-";
+    }
+
+    return String(value);
+  }
+
+  function buildCabaranPbdTable(records) {
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "overflow-x:auto;margin:0 0 0.55em;";
+
+    const table = document.createElement("table");
+    table.style.cssText =
+      "width:100%;border-collapse:collapse;background:#fff;border:1px solid #5c4a32;";
+
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    [
+      "Kelas",
+      "Nama",
+      "Checkpoint",
+      "Betul",
+      "%",
+      "TP Cadangan",
+      "Dikemas Kini",
+    ].forEach(function (label) {
+      const th = document.createElement("th");
+      th.textContent = label;
+      th.style.cssText =
+        "text-align:left;font-size:0.68rem;padding:0.3em;border-bottom:1px solid #5c4a32;";
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+
+    const tbody = document.createElement("tbody");
+    records.forEach(function (record) {
+      const row = document.createElement("tr");
+      const totalLabel =
+        formatCabaranPbdCell(record.totalCorrect) +
+        " / " +
+        formatCabaranPbdCell(record.totalQuestions);
+      const values = [
+        record.classId,
+        record.studentName,
+        record.checkpointId,
+        totalLabel,
+        record.percentage,
+        record.suggestedTP,
+        formatDashboardTimestamp(record.updatedAt),
+      ];
+
+      values.forEach(function (value) {
+        const td = document.createElement("td");
+        td.textContent = formatCabaranPbdCell(value);
+        td.style.cssText =
+          "font-size:0.68rem;padding:0.3em;border-bottom:1px solid rgba(92,74,50,0.25);";
+        row.appendChild(td);
+      });
+
+      tbody.appendChild(row);
+    });
+
+    table.appendChild(thead);
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+
+    return wrap;
+  }
+
+  async function refreshTeacherCabaranPbdList() {
+    const engine = window.KMJ_Assessment || window.KMJ_Pronunciation;
+
+    if (!teacherCabaranPbdListEl) {
+      return;
+    }
+
+    teacherCabaranPbdListEl.innerHTML = "";
+
+    if (!engine || !engine.getCabaranResultsFromGoogleSheet) {
+      teacherCabaranPbdListEl.textContent =
+        "Bacaan Cabaran_Results belum tersedia. Apps Script action getCabaranResults diperlukan.";
+      return;
+    }
+
+    let records = [];
+
+    try {
+      records = await engine.getCabaranResultsFromGoogleSheet();
+    } catch (error) {
+      console.error("[KMJ] Cabaran PBD sheet read error", error);
+      teacherCabaranPbdListEl.textContent =
+        "Cabaran PBD gagal dimuat: " +
+        (error && error.message ? error.message : String(error));
+      return;
+    }
+
+    if (!records.length) {
+      teacherCabaranPbdListEl.textContent = "Tiada rekod Cabaran PBD.";
+      return;
+    }
+
+    teacherCabaranPbdListEl.appendChild(buildCabaranPbdTable(records));
+  }
+
   async function refreshTeacherSyncStatus() {
     const engine = window.KMJ_Assessment || window.KMJ_Pronunciation;
 
@@ -10380,6 +10486,7 @@
     await refreshTeacherRosterPanel();
     await refreshTeacherSyncStatus();
     await refreshTeacherAssessmentList();
+    await refreshTeacherCabaranPbdList();
   }
 
   function isTeacherDashboardOpen() {
@@ -10613,6 +10720,16 @@
       "margin:0 0 0.35em;font-size:0.72rem;opacity:0.85;line-height:1.3;";
     teacherSyncStatusEl.textContent = "Belum Sync: 0 rekod | Sudah Sync: 0 rekod";
 
+    const cabaranPbdTitle = document.createElement("p");
+    cabaranPbdTitle.textContent = "Cabaran PBD";
+    cabaranPbdTitle.style.cssText =
+      "margin:0.45em 0 0.35em;font-size:0.85rem;font-weight:700;";
+
+    teacherCabaranPbdListEl = document.createElement("div");
+    teacherCabaranPbdListEl.id = "kmj-teacher-cabaran-pbd-list";
+    teacherCabaranPbdListEl.style.cssText =
+      "margin:0 0 0.45em;font-size:0.68rem;line-height:1.35;";
+
     teacherRosterPanelEl.appendChild(importTitle);
     teacherRosterPanelEl.appendChild(teacherImportTextarea);
     teacherRosterPanelEl.appendChild(importBtn);
@@ -10620,6 +10737,8 @@
     teacherRosterPanelEl.appendChild(resetAllBtn);
     teacherRosterPanelEl.appendChild(teacherRosterCountEl);
     teacherRosterPanelEl.appendChild(rosterTable);
+    teacherRosterPanelEl.appendChild(cabaranPbdTitle);
+    teacherRosterPanelEl.appendChild(teacherCabaranPbdListEl);
     teacherRosterPanelEl.appendChild(assessTitle);
     teacherRosterPanelEl.appendChild(teacherRecordFilterToggleBtn);
     teacherRosterPanelEl.appendChild(teacherSyncStatusEl);
@@ -10679,6 +10798,10 @@
 
     if (teacherDashboardListEl) {
       teacherDashboardListEl.innerHTML = "";
+    }
+
+    if (teacherCabaranPbdListEl) {
+      teacherCabaranPbdListEl.innerHTML = "";
     }
   }
 

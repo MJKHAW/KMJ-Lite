@@ -133,6 +133,10 @@ function doPost(e) {
       return syncCabaranSummaries_(body);
     }
 
+    if (body.action === "getCabaranResults") {
+      return getCabaranResults_(body);
+    }
+
     var records = body.records;
 
     if (!records || !records.length) {
@@ -923,6 +927,71 @@ function syncCabaranSummaries_(body) {
     researchInserted: research.inserted,
     researchUpdated: research.updated,
   });
+}
+
+function getCabaranResults_(body) {
+  var schoolCode = String((body && body.schoolCode) || "")
+    .trim()
+    .toUpperCase();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CABARAN_RESULTS_SHEET_NAME);
+  var lastRow;
+  var values;
+  var records = [];
+  var i;
+  var row;
+  var record;
+
+  if (!sheet) {
+    return jsonResponse_({ success: true, records: [] });
+  }
+
+  lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return jsonResponse_({ success: true, records: [] });
+  }
+
+  values = sheet.getRange(2, 1, lastRow - 1, CABARAN_RESULTS_HEADERS.length).getValues();
+
+  for (i = 0; i < values.length; i += 1) {
+    row = values[i] || [];
+
+    if (schoolCode && String(row[0] || "").trim().toUpperCase() !== schoolCode) {
+      continue;
+    }
+
+    record = {
+      schoolCode: row[0] || "",
+      classId: row[1] || "",
+      studentId: row[2] || "",
+      studentName: row[3] || "",
+      checkpointId: row[4] || "",
+      totalCorrect: row[5],
+      totalQuestions: row[6],
+      percentage: row[7],
+      suggestedTP: row[8] || "",
+      cabaranCompleted: row[9] === false ? false : true,
+      updatedAt: formatSheetDateValue_(row[10]),
+      syncedAt: formatSheetDateValue_(row[11]),
+    };
+
+    records.push(record);
+  }
+
+  records.sort(function (a, b) {
+    return Date.parse(b.updatedAt || b.syncedAt || "") - Date.parse(a.updatedAt || a.syncedAt || "");
+  });
+
+  return jsonResponse_({ success: true, records: records });
+}
+
+function formatSheetDateValue_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return value.toISOString();
+  }
+
+  return String(value || "");
 }
 
 function buildCabaranResearchKeyRowMap_(sheet) {

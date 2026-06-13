@@ -995,6 +995,53 @@
     }
   }
 
+  async function getCabaranResultsFromGoogleSheet() {
+    if (!isSyncEndpointConfigured()) {
+      throw new Error(
+        "Sila tetapkan KMJ_SYNC_ENDPOINT dalam pronunciation-verify.js."
+      );
+    }
+
+    if (isBrowserOffline()) {
+      throw new Error("Tiada internet. Data Cabaran PBD tidak dapat dimuat.");
+    }
+
+    const response = await fetch(KMJ_SYNC_ENDPOINT, {
+      method: "POST",
+      redirect: "follow",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8",
+      },
+      body: JSON.stringify({
+        action: "getCabaranResults",
+        schoolCode: getSchoolCode(),
+      }),
+    });
+    const responseText = await response.text();
+    let result = null;
+
+    try {
+      result = responseText ? JSON.parse(responseText) : {};
+    } catch (parseError) {
+      throw new Error(
+        "Respons tidak sah daripada server: " +
+          String(responseText || "").slice(0, 180)
+      );
+    }
+
+    if (!response.ok || !result || result.success !== true) {
+      throw new Error(buildSyncErrorMessage(null, response, responseText, result));
+    }
+
+    if (!Array.isArray(result.records)) {
+      throw new Error(
+        "Apps Script belum ada action getCabaranResults. Deploy semula PBD_Results_Sync.gs."
+      );
+    }
+
+    return result.records;
+  }
+
   function getDisplayResult(record) {
     const r = normalizeRecord(record);
 
@@ -3742,6 +3789,7 @@
     getSyncStatusCounts: getSyncStatusCounts,
     getRecordsNeedingSync: getRecordsNeedingSync,
     syncPendingResultsToGoogleSheet: syncPendingResultsToGoogleSheet,
+    getCabaranResultsFromGoogleSheet: getCabaranResultsFromGoogleSheet,
     cabaranSummaryToSyncPayload: cabaranSummaryToSyncPayload,
     syncCabaranSummariesToGoogleSheet: syncCabaranSummariesToGoogleSheet,
     tryAutoSyncAfterAssessment: tryAutoSyncAfterAssessment,
