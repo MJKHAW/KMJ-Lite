@@ -790,7 +790,9 @@ function generateSchoolReport_(body) {
     generatedAt,
     pbdRows.length,
     cabaranRows.length,
-    researchRows.length
+    researchRows.length,
+    cabaranRows,
+    researchRows
   );
 
   return jsonResponse_({
@@ -930,7 +932,9 @@ function writeDashboardSheet_(
   generatedAt,
   totalPbdRecords,
   totalCabaranCheckpoints,
-  totalResearchRecords
+  totalResearchRecords,
+  cabaranRows,
+  researchRows
 ) {
   var sheet = getOrCreateSheetInSpreadsheet_(spreadsheet, "Dashboard");
   var rows = [
@@ -941,10 +945,214 @@ function writeDashboardSheet_(
     ["Total Cabaran checkpoints", totalCabaranCheckpoints],
     ["Total Research records", totalResearchRecords],
   ];
+  var cabaranAverageRows = buildAverageSummaryRows_(
+    cabaranRows,
+    CABARAN_RESULTS_HEADERS,
+    "checkpointId",
+    "percentage"
+  );
+  var suggestedTpRows = buildCountSummaryRows_(
+    cabaranRows,
+    CABARAN_RESULTS_HEADERS,
+    "suggestedTP"
+  );
+  var improvementRows = buildAverageSummaryRows_(
+    researchRows,
+    CABARAN_RESEARCH_HEADERS,
+    "checkpointId",
+    "improvementPercentage"
+  );
 
   sheet.clear();
+  removeDashboardCharts_(sheet);
   sheet.getRange(1, 1, rows.length, 2).setValues(rows);
-  sheet.autoResizeColumns(1, 2);
+  sheet.getRange(8, 1).setValue("Cabaran average percentage by checkpointId");
+  writeSummarySection_(
+    sheet,
+    9,
+    1,
+    ["checkpointId", "averagePercentage"],
+    cabaranAverageRows,
+    "Tiada rekod"
+  );
+  addDashboardChart_(
+    sheet,
+    "Cabaran average percentage by checkpointId",
+    9,
+    1,
+    cabaranAverageRows.length,
+    8,
+    4,
+    Charts.ChartType.BAR
+  );
+
+  sheet.getRange(8, 4).setValue("Suggested TP count");
+  writeSummarySection_(
+    sheet,
+    9,
+    4,
+    ["suggestedTP", "count"],
+    suggestedTpRows,
+    "Tiada rekod"
+  );
+  addDashboardChart_(
+    sheet,
+    "Suggested TP count",
+    9,
+    4,
+    suggestedTpRows.length,
+    8,
+    10,
+    Charts.ChartType.BAR
+  );
+
+  sheet.getRange(26, 1).setValue("Research average improvement by checkpointId");
+  writeSummarySection_(
+    sheet,
+    27,
+    1,
+    ["checkpointId", "averageImprovementPercentage"],
+    improvementRows,
+    "Tiada rekod"
+  );
+  addDashboardChart_(
+    sheet,
+    "Research average improvement by checkpointId",
+    27,
+    1,
+    improvementRows.length,
+    26,
+    4,
+    Charts.ChartType.COLUMN
+  );
+
+  sheet.autoResizeColumns(1, 5);
+}
+
+function removeDashboardCharts_(sheet) {
+  var charts = sheet.getCharts();
+  var i;
+
+  for (i = 0; i < charts.length; i += 1) {
+    sheet.removeChart(charts[i]);
+  }
+}
+
+function writeSummarySection_(sheet, startRow, startColumn, headers, rows, emptyMessage) {
+  sheet.getRange(startRow, startColumn, 1, headers.length).setValues([headers]);
+
+  if (!rows.length) {
+    sheet.getRange(startRow + 1, startColumn).setValue(emptyMessage);
+    return;
+  }
+
+  sheet.getRange(startRow + 1, startColumn, rows.length, headers.length).setValues(rows);
+}
+
+function addDashboardChart_(
+  sheet,
+  title,
+  tableStartRow,
+  tableStartColumn,
+  rowCount,
+  chartRow,
+  chartColumn,
+  chartType
+) {
+  var chart;
+
+  if (!rowCount) {
+    return;
+  }
+
+  chart = sheet
+    .newChart()
+    .setChartType(chartType)
+    .addRange(sheet.getRange(tableStartRow, tableStartColumn, rowCount + 1, 2))
+    .setOption("title", title)
+    .setOption("legend", { position: "none" })
+    .setPosition(chartRow, chartColumn, 0, 0)
+    .build();
+
+  sheet.insertChart(chart);
+}
+
+function buildAverageSummaryRows_(rows, headers, groupHeader, valueHeader) {
+  var groupIndex = getHeaderIndex_(headers, groupHeader);
+  var valueIndex = getHeaderIndex_(headers, valueHeader);
+  var buckets = {};
+  var keys;
+  var result = [];
+  var i;
+  var row;
+  var key;
+  var value;
+
+  if (groupIndex < 0 || valueIndex < 0) {
+    return result;
+  }
+
+  for (i = 0; i < rows.length; i += 1) {
+    row = rows[i] || [];
+    key = String(row[groupIndex] || "").trim();
+    value = Number(row[valueIndex]);
+
+    if (!key || isNaN(value)) {
+      continue;
+    }
+
+    if (!buckets[key]) {
+      buckets[key] = { sum: 0, count: 0 };
+    }
+
+    buckets[key].sum += value;
+    buckets[key].count += 1;
+  }
+
+  keys = Object.keys(buckets).sort();
+
+  for (i = 0; i < keys.length; i += 1) {
+    key = keys[i];
+    result.push([key, roundReportNumber_(buckets[key].sum / buckets[key].count)]);
+  }
+
+  return result;
+}
+
+function buildCountSummaryRows_(rows, headers, groupHeader) {
+  var groupIndex = getHeaderIndex_(headers, groupHeader);
+  var counts = {};
+  var keys;
+  var result = [];
+  var i;
+  var key;
+
+  if (groupIndex < 0) {
+    return result;
+  }
+
+  for (i = 0; i < rows.length; i += 1) {
+    key = String((rows[i] || [])[groupIndex] || "").trim();
+
+    if (!key) {
+      continue;
+    }
+
+    counts[key] = (counts[key] || 0) + 1;
+  }
+
+  keys = Object.keys(counts).sort();
+
+  for (i = 0; i < keys.length; i += 1) {
+    key = keys[i];
+    result.push([key, counts[key]]);
+  }
+
+  return result;
+}
+
+function roundReportNumber_(value) {
+  return Math.round(Number(value) * 100) / 100;
 }
 
 function parseExpiryDate_(value) {
