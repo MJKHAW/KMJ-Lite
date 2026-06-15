@@ -137,6 +137,10 @@ function doPost(e) {
       return getCabaranResults_(body);
     }
 
+    if (body.action === "generateSchoolReport") {
+      return generateSchoolReport_(body);
+    }
+
     var records = body.records;
 
     if (!records || !records.length) {
@@ -708,6 +712,239 @@ function findHeaderColumn_(sheet, headerName) {
   }
 
   return -1;
+}
+
+function generateSchoolReport_(body) {
+  var schoolCode = String((body && body.schoolCode) || "")
+    .trim()
+    .toUpperCase();
+  var master = SpreadsheetApp.getActiveSpreadsheet();
+  var licenseInfo;
+  var reportSpreadsheet;
+  var generatedAt;
+  var pbdRows;
+  var cabaranRows;
+  var researchRows;
+
+  if (!schoolCode) {
+    return jsonResponse_({ success: false, error: "schoolCode diperlukan." });
+  }
+
+  licenseInfo = getSchoolReportLicenseInfo_(schoolCode);
+
+  if (!licenseInfo) {
+    return jsonResponse_({ success: false, error: "Kod sekolah tidak dijumpai." });
+  }
+
+  if (!licenseInfo.schoolReportUrl) {
+    return jsonResponse_({
+      success: false,
+      error: "SchoolReportUrl belum ditetapkan untuk sekolah ini.",
+    });
+  }
+
+  reportSpreadsheet = SpreadsheetApp.openByUrl(licenseInfo.schoolReportUrl);
+  generatedAt = new Date().toISOString();
+
+  pbdRows = getFilteredRowsBySchoolCode_(
+    master,
+    PBD_RESULTS_SHEET_NAME,
+    PBD_RESULTS_HEADERS,
+    schoolCode
+  );
+  cabaranRows = getFilteredRowsBySchoolCode_(
+    master,
+    CABARAN_RESULTS_SHEET_NAME,
+    CABARAN_RESULTS_HEADERS,
+    schoolCode
+  );
+  researchRows = getFilteredRowsBySchoolCode_(
+    master,
+    CABARAN_RESEARCH_SHEET_NAME,
+    CABARAN_RESEARCH_HEADERS,
+    schoolCode
+  );
+
+  writeReportSheet_(
+    reportSpreadsheet,
+    PBD_RESULTS_SHEET_NAME,
+    PBD_RESULTS_HEADERS,
+    pbdRows
+  );
+  writeReportSheet_(
+    reportSpreadsheet,
+    CABARAN_RESULTS_SHEET_NAME,
+    CABARAN_RESULTS_HEADERS,
+    cabaranRows
+  );
+  writeReportSheet_(
+    reportSpreadsheet,
+    CABARAN_RESEARCH_SHEET_NAME,
+    CABARAN_RESEARCH_HEADERS,
+    researchRows
+  );
+  writeDashboardSheet_(
+    reportSpreadsheet,
+    licenseInfo.schoolName,
+    schoolCode,
+    generatedAt,
+    pbdRows.length,
+    cabaranRows.length,
+    researchRows.length
+  );
+
+  return jsonResponse_({
+    success: true,
+    schoolCode: schoolCode,
+    schoolName: licenseInfo.schoolName,
+    generatedAt: generatedAt,
+    pbdRecords: pbdRows.length,
+    cabaranCheckpoints: cabaranRows.length,
+    researchRecords: researchRows.length,
+  });
+}
+
+function getSchoolReportLicenseInfo_(schoolCode) {
+  var sheet = getOrCreateSheet_(LICENSES_SHEET_NAME);
+  var lastRow;
+  var lastColumn;
+  var values;
+  var reportUrlColumn;
+  var i;
+  var row;
+
+  ensureHeaders_(sheet, LICENSE_HEADERS);
+  lastRow = sheet.getLastRow();
+  lastColumn = sheet.getLastColumn();
+
+  if (lastRow < 2 || lastColumn < 1) {
+    return null;
+  }
+
+  values = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
+  reportUrlColumn = findHeaderColumn_(sheet, "SchoolReportUrl");
+
+  for (i = 0; i < values.length; i += 1) {
+    row = values[i] || [];
+
+    if (String(row[0] || "").trim().toUpperCase() === schoolCode) {
+      return {
+        schoolCode: schoolCode,
+        schoolName: String(row[1] || "").trim(),
+        schoolReportUrl:
+          reportUrlColumn > 0
+            ? String(row[reportUrlColumn - 1] || "").trim()
+            : "",
+      };
+    }
+  }
+
+  return null;
+}
+
+function getFilteredRowsBySchoolCode_(spreadsheet, sheetName, headers, schoolCode) {
+  var sheet = spreadsheet.getSheetByName(sheetName);
+  var lastRow;
+  var values;
+  var schoolCodeIndex;
+  var rows = [];
+  var i;
+  var row;
+
+  if (!sheet) {
+    return rows;
+  }
+
+  lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return rows;
+  }
+
+  schoolCodeIndex = getHeaderIndex_(headers, "schoolCode");
+
+  if (schoolCodeIndex < 0) {
+    return rows;
+  }
+
+  values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+
+  for (i = 0; i < values.length; i += 1) {
+    row = values[i] || [];
+
+    if (String(row[schoolCodeIndex] || "").trim().toUpperCase() === schoolCode) {
+      rows.push(row);
+    }
+  }
+
+  return rows;
+}
+
+function getHeaderIndex_(headers, headerName) {
+  var target = String(headerName || "")
+    .trim()
+    .toLowerCase();
+  var i;
+
+  for (i = 0; i < headers.length; i += 1) {
+    if (
+      String(headers[i] || "")
+        .trim()
+        .toLowerCase() === target
+    ) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+function getOrCreateSheetInSpreadsheet_(spreadsheet, name) {
+  var sheet = spreadsheet.getSheetByName(name);
+
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(name);
+  }
+
+  return sheet;
+}
+
+function writeReportSheet_(spreadsheet, sheetName, headers, rows) {
+  var sheet = getOrCreateSheetInSpreadsheet_(spreadsheet, sheetName);
+
+  sheet.clear();
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+
+  if (rows.length) {
+    sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  }
+
+  sheet.setFrozenRows(1);
+  sheet.autoResizeColumns(1, headers.length);
+}
+
+function writeDashboardSheet_(
+  spreadsheet,
+  schoolName,
+  schoolCode,
+  generatedAt,
+  totalPbdRecords,
+  totalCabaranCheckpoints,
+  totalResearchRecords
+) {
+  var sheet = getOrCreateSheetInSpreadsheet_(spreadsheet, "Dashboard");
+  var rows = [
+    ["School name", schoolName || "-"],
+    ["School code", schoolCode],
+    ["Last generated timestamp", generatedAt],
+    ["Total PBD records", totalPbdRecords],
+    ["Total Cabaran checkpoints", totalCabaranCheckpoints],
+    ["Total Research records", totalResearchRecords],
+  ];
+
+  sheet.clear();
+  sheet.getRange(1, 1, rows.length, 2).setValues(rows);
+  sheet.autoResizeColumns(1, 2);
 }
 
 function parseExpiryDate_(value) {
