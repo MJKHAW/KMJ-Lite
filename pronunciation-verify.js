@@ -1714,6 +1714,7 @@
           ? Number(data.maxStudents)
           : DEFAULT_MAX_ROSTER_STUDENTS,
       expiryDate: String(data.expiryDate || "").trim(),
+      schoolReportUrl: String(data.schoolReportUrl || "").trim(),
       activatedAt: new Date().toISOString(),
       adminEmail: String(adminEmail || "")
         .trim()

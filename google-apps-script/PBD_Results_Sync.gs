@@ -193,7 +193,7 @@ function doGet() {
   return jsonResponse_({
     success: true,
     message:
-      "KMJ-Lite endpoint is ready (PBD_Results + Cabaran_Results upsert + validateLicense + roster sync).",
+      "KMJ-Lite endpoint is ready (PBD_Results + Cabaran_Results upsert + getCabaranResults + Cabaran_Research + validateLicense + roster sync).",
   });
 }
 
@@ -635,6 +635,14 @@ function validateLicense_(body) {
     .trim()
     .toUpperCase();
   var expiryDate = parseExpiryDate_(row[6]);
+  var schoolReportUrlColumn = findHeaderColumn_(sheet, "SchoolReportUrl");
+  var schoolReportUrl = "";
+
+  if (schoolReportUrlColumn > 0) {
+    schoolReportUrl = String(
+      sheet.getRange(matchIndex + 2, schoolReportUrlColumn).getValue() || ""
+    ).trim();
+  }
 
   if (rowAdminEmail !== adminEmail) {
     return jsonResponse_({ success: false, error: "Email admin tidak sepadan." });
@@ -671,7 +679,35 @@ function validateLicense_(body) {
     schoolName: schoolName,
     maxStudents: maxStudents,
     expiryDate: formatIsoDate_(expiryDate),
+    schoolReportUrl: schoolReportUrl,
   });
+}
+
+function findHeaderColumn_(sheet, headerName) {
+  var lastColumn = sheet.getLastColumn();
+  var target = String(headerName || "")
+    .trim()
+    .toLowerCase();
+  var headers;
+  var i;
+
+  if (!target || lastColumn < 1) {
+    return -1;
+  }
+
+  headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
+
+  for (i = 0; i < headers.length; i += 1) {
+    if (
+      String(headers[i] || "")
+        .trim()
+        .toLowerCase() === target
+    ) {
+      return i + 1;
+    }
+  }
+
+  return -1;
 }
 
 function parseExpiryDate_(value) {

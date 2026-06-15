@@ -10486,7 +10486,6 @@
     await refreshTeacherRosterPanel();
     await refreshTeacherSyncStatus();
     await refreshTeacherAssessmentList();
-    await refreshTeacherCabaranPbdList();
   }
 
   function isTeacherDashboardOpen() {
@@ -10720,15 +10719,27 @@
       "margin:0 0 0.35em;font-size:0.72rem;opacity:0.85;line-height:1.3;";
     teacherSyncStatusEl.textContent = "Belum Sync: 0 rekod | Sudah Sync: 0 rekod";
 
-    const cabaranPbdTitle = document.createElement("p");
-    cabaranPbdTitle.textContent = "Cabaran PBD";
-    cabaranPbdTitle.style.cssText =
-      "margin:0.45em 0 0.35em;font-size:0.85rem;font-weight:700;";
+    const schoolReportBtn = document.createElement("button");
+    schoolReportBtn.type = "button";
+    schoolReportBtn.textContent = "Buka Laporan Sekolah Saya";
+    schoolReportBtn.style.cssText =
+      "margin:0.45em 0 0.35em;padding:0.35em 0.55em;border:2px solid #5c4a32;" +
+      "border-radius:8px;background:#fff;font-family:" +
+      BELAJAR_FONT +
+      ";font-size:0.75rem;font-weight:700;cursor:pointer;width:100%;";
+    schoolReportBtn.addEventListener("click", function () {
+      const engine = getAssessmentEngine();
+      const license =
+        engine && engine.readLicenseActivation ? engine.readLicenseActivation() : null;
+      const url = String((license && license.schoolReportUrl) || "").trim();
 
-    teacherCabaranPbdListEl = document.createElement("div");
-    teacherCabaranPbdListEl.id = "kmj-teacher-cabaran-pbd-list";
-    teacherCabaranPbdListEl.style.cssText =
-      "margin:0 0 0.45em;font-size:0.68rem;line-height:1.35;";
+      if (!url) {
+        window.alert("Pautan laporan sekolah belum ditetapkan.");
+        return;
+      }
+
+      window.open(url, "_blank", "noopener");
+    });
 
     teacherRosterPanelEl.appendChild(importTitle);
     teacherRosterPanelEl.appendChild(teacherImportTextarea);
@@ -10737,8 +10748,7 @@
     teacherRosterPanelEl.appendChild(resetAllBtn);
     teacherRosterPanelEl.appendChild(teacherRosterCountEl);
     teacherRosterPanelEl.appendChild(rosterTable);
-    teacherRosterPanelEl.appendChild(cabaranPbdTitle);
-    teacherRosterPanelEl.appendChild(teacherCabaranPbdListEl);
+    teacherRosterPanelEl.appendChild(schoolReportBtn);
     teacherRosterPanelEl.appendChild(assessTitle);
     teacherRosterPanelEl.appendChild(teacherRecordFilterToggleBtn);
     teacherRosterPanelEl.appendChild(teacherSyncStatusEl);
