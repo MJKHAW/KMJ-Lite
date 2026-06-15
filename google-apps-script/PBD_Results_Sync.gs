@@ -806,6 +806,75 @@ function generateSchoolReport_(body) {
   });
 }
 
+function refreshAllSchoolReports() {
+  var sheet = getOrCreateSheet_(LICENSES_SHEET_NAME);
+  var lastRow;
+  var lastColumn;
+  var values;
+  var reportUrlColumn;
+  var totalProcessed = 0;
+  var totalSuccess = 0;
+  var totalFailed = 0;
+  var i;
+  var row;
+  var schoolCode;
+  var status;
+  var schoolReportUrl;
+  var resultText;
+
+  ensureHeaders_(sheet, LICENSE_HEADERS);
+  lastRow = sheet.getLastRow();
+  lastColumn = sheet.getLastColumn();
+  reportUrlColumn = findHeaderColumn_(sheet, "SchoolReportUrl");
+
+  if (lastRow < 2 || reportUrlColumn < 1) {
+    return {
+      totalProcessed: 0,
+      totalSuccess: 0,
+      totalFailed: 0,
+    };
+  }
+
+  values = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
+
+  for (i = 0; i < values.length; i += 1) {
+    row = values[i] || [];
+    schoolCode = String(row[0] || "")
+      .trim()
+      .toUpperCase();
+    status = String(row[5] || "")
+      .trim()
+      .toUpperCase();
+    schoolReportUrl = String(row[reportUrlColumn - 1] || "").trim();
+
+    if (status !== "ACTIVE" || !schoolCode || !schoolReportUrl) {
+      continue;
+    }
+
+    totalProcessed += 1;
+
+    try {
+      resultText = generateSchoolReport_({ schoolCode: schoolCode }).getContent();
+      Logger.log("School report refreshed: " + schoolCode + " " + resultText);
+      totalSuccess += 1;
+    } catch (error) {
+      Logger.log(
+        "School report refresh failed: " +
+          schoolCode +
+          " " +
+          (error && error.message ? error.message : String(error))
+      );
+      totalFailed += 1;
+    }
+  }
+
+  return {
+    totalProcessed: totalProcessed,
+    totalSuccess: totalSuccess,
+    totalFailed: totalFailed,
+  };
+}
+
 function getSchoolReportLicenseInfo_(schoolCode) {
   var sheet = getOrCreateSheet_(LICENSES_SHEET_NAME);
   var lastRow;
