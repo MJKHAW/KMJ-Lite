@@ -31,6 +31,7 @@ var CABARAN_RESULTS_SHEET_NAME = "Cabaran_Results";
 var CABARAN_RESEARCH_SHEET_NAME = "Cabaran_Research";
 var LICENSES_SHEET_NAME = "Licenses";
 var STUDENT_ROSTER_SHEET_NAME = "Student_Roster";
+var STUDENT_SUMMARY_SHEET_NAME = "Student_Summary";
 
 var LICENSE_HEADERS = [
   "SchoolCode",
@@ -104,6 +105,17 @@ var STUDENT_ROSTER_HEADERS = [
   "StudentId",
   "CreatedAt",
   "UpdatedAt",
+];
+
+var STUDENT_SUMMARY_HEADERS = [
+  "classId",
+  "studentId",
+  "studentName",
+  "completedCheckpoints",
+  "averagePercentage",
+  "latestSuggestedTP",
+  "averageImprovementPercentage",
+  "lastUpdated",
 ];
 
 function doPost(e) {
@@ -725,6 +737,7 @@ function generateSchoolReport_(body) {
   var pbdRows;
   var cabaranRows;
   var researchRows;
+  var studentSummaryRows;
 
   if (!schoolCode) {
     return jsonResponse_({ success: false, error: "schoolCode diperlukan." });
@@ -764,6 +777,7 @@ function generateSchoolReport_(body) {
     CABARAN_RESEARCH_HEADERS,
     schoolCode
   );
+  studentSummaryRows = buildStudentSummaryRows_(cabaranRows, researchRows);
 
   writeReportSheet_(
     reportSpreadsheet,
@@ -782,6 +796,12 @@ function generateSchoolReport_(body) {
     CABARAN_RESEARCH_SHEET_NAME,
     CABARAN_RESEARCH_HEADERS,
     researchRows
+  );
+  writeReportSheet_(
+    reportSpreadsheet,
+    STUDENT_SUMMARY_SHEET_NAME,
+    STUDENT_SUMMARY_HEADERS,
+    studentSummaryRows
   );
   writeDashboardSheet_(
     reportSpreadsheet,
@@ -803,6 +823,7 @@ function generateSchoolReport_(body) {
     pbdRecords: pbdRows.length,
     cabaranCheckpoints: cabaranRows.length,
     researchRecords: researchRows.length,
+    studentSummaryRecords: studentSummaryRows.length,
   });
 }
 
@@ -1218,6 +1239,172 @@ function buildCountSummaryRows_(rows, headers, groupHeader) {
   }
 
   return result;
+}
+
+function buildStudentSummaryRows_(cabaranRows, researchRows) {
+  var classIndex = getHeaderIndex_(CABARAN_RESULTS_HEADERS, "classId");
+  var studentIdIndex = getHeaderIndex_(CABARAN_RESULTS_HEADERS, "studentId");
+  var studentNameIndex = getHeaderIndex_(CABARAN_RESULTS_HEADERS, "studentName");
+  var checkpointIndex = getHeaderIndex_(CABARAN_RESULTS_HEADERS, "checkpointId");
+  var percentageIndex = getHeaderIndex_(CABARAN_RESULTS_HEADERS, "percentage");
+  var suggestedTpIndex = getHeaderIndex_(CABARAN_RESULTS_HEADERS, "suggestedTP");
+  var updatedAtIndex = getHeaderIndex_(CABARAN_RESULTS_HEADERS, "updatedAt");
+  var researchClassIndex = getHeaderIndex_(CABARAN_RESEARCH_HEADERS, "classId");
+  var researchStudentIdIndex = getHeaderIndex_(CABARAN_RESEARCH_HEADERS, "studentId");
+  var researchStudentNameIndex = getHeaderIndex_(CABARAN_RESEARCH_HEADERS, "studentName");
+  var improvementIndex = getHeaderIndex_(
+    CABARAN_RESEARCH_HEADERS,
+    "improvementPercentage"
+  );
+  var students = {};
+  var keys;
+  var result = [];
+  var i;
+  var row;
+  var key;
+  var student;
+  var percentage;
+  var updatedAt;
+  var improvement;
+
+  for (i = 0; i < cabaranRows.length; i += 1) {
+    row = cabaranRows[i] || [];
+    key = buildStudentSummaryKey_(
+      row[classIndex],
+      row[studentIdIndex],
+      row[studentNameIndex]
+    );
+
+    if (!key) {
+      continue;
+    }
+
+    student = getOrCreateStudentSummary_(students, key, {
+      classId: row[classIndex],
+      studentId: row[studentIdIndex],
+      studentName: row[studentNameIndex],
+    });
+    student.checkpoints[String(row[checkpointIndex] || "").trim()] = true;
+    percentage = Number(row[percentageIndex]);
+
+    if (!isNaN(percentage)) {
+      student.percentageSum += percentage;
+      student.percentageCount += 1;
+    }
+
+    updatedAt = String(row[updatedAtIndex] || "").trim();
+
+    if (
+      updatedAt &&
+      (!student.lastUpdated ||
+        Date.parse(updatedAt) >= Date.parse(student.lastUpdated || ""))
+    ) {
+      student.lastUpdated = updatedAt;
+      student.latestSuggestedTP = String(row[suggestedTpIndex] || "").trim();
+    }
+  }
+
+  for (i = 0; i < researchRows.length; i += 1) {
+    row = researchRows[i] || [];
+    key = buildStudentSummaryKey_(
+      row[researchClassIndex],
+      row[researchStudentIdIndex],
+      row[researchStudentNameIndex]
+    );
+
+    if (!key) {
+      continue;
+    }
+
+    student = getOrCreateStudentSummary_(students, key, {
+      classId: row[researchClassIndex],
+      studentId: row[researchStudentIdIndex],
+      studentName: row[researchStudentNameIndex],
+    });
+    improvement = Number(row[improvementIndex]);
+
+    if (!isNaN(improvement)) {
+      student.improvementSum += improvement;
+      student.improvementCount += 1;
+    }
+  }
+
+  keys = Object.keys(students).sort(function (a, b) {
+    var studentA = students[a];
+    var studentB = students[b];
+    var classCompare = String(studentA.classId || "").localeCompare(
+      String(studentB.classId || "")
+    );
+
+    if (classCompare !== 0) {
+      return classCompare;
+    }
+
+    return String(studentA.studentName || "").localeCompare(
+      String(studentB.studentName || "")
+    );
+  });
+
+  for (i = 0; i < keys.length; i += 1) {
+    student = students[keys[i]];
+    result.push([
+      student.classId,
+      student.studentId,
+      student.studentName,
+      Object.keys(student.checkpoints).filter(Boolean).length,
+      student.percentageCount
+        ? roundReportNumber_(student.percentageSum / student.percentageCount)
+        : "",
+      student.latestSuggestedTP,
+      student.improvementCount
+        ? roundReportNumber_(student.improvementSum / student.improvementCount)
+        : "",
+      student.lastUpdated,
+    ]);
+  }
+
+  return result;
+}
+
+function buildStudentSummaryKey_(classId, studentId, studentName) {
+  var normalizedClassId = String(classId || "")
+    .trim()
+    .toLowerCase();
+  var normalizedStudentId = String(studentId || "")
+    .trim()
+    .toLowerCase();
+  var normalizedStudentName = String(studentName || "")
+    .trim()
+    .toLowerCase();
+
+  if (normalizedStudentId) {
+    return "id|" + normalizedStudentId;
+  }
+
+  if (normalizedClassId && normalizedStudentName) {
+    return "name|" + normalizedClassId + "|" + normalizedStudentName;
+  }
+
+  return "";
+}
+
+function getOrCreateStudentSummary_(students, key, values) {
+  if (!students[key]) {
+    students[key] = {
+      classId: String((values && values.classId) || "").trim(),
+      studentId: String((values && values.studentId) || "").trim(),
+      studentName: String((values && values.studentName) || "").trim(),
+      checkpoints: {},
+      percentageSum: 0,
+      percentageCount: 0,
+      latestSuggestedTP: "",
+      improvementSum: 0,
+      improvementCount: 0,
+      lastUpdated: "",
+    };
+  }
+
+  return students[key];
 }
 
 function roundReportNumber_(value) {
