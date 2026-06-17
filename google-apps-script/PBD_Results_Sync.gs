@@ -812,7 +812,8 @@ function generateSchoolReport_(body) {
     cabaranRows.length,
     researchRows.length,
     cabaranRows,
-    researchRows
+    researchRows,
+    studentSummaryRows
   );
 
   return jsonResponse_({
@@ -1024,9 +1025,19 @@ function writeDashboardSheet_(
   totalCabaranCheckpoints,
   totalResearchRecords,
   cabaranRows,
-  researchRows
+  researchRows,
+  studentSummaryRows
 ) {
   var sheet = getOrCreateSheetInSpreadsheet_(spreadsheet, "Dashboard");
+  var averageClassPercentage = averageStudentSummaryValue_(
+    studentSummaryRows,
+    "averagePercentage"
+  );
+  var averageImprovementPercentage = averageStudentSummaryValue_(
+    studentSummaryRows,
+    "averageImprovementPercentage"
+  );
+  var studentsBelowTp3 = countStudentsBelowTp_(studentSummaryRows, "TP3");
   var rows = [
     ["School name", schoolName || "-"],
     ["School code", schoolCode],
@@ -1034,6 +1045,10 @@ function writeDashboardSheet_(
     ["Total PBD records", totalPbdRecords],
     ["Total Cabaran checkpoints", totalCabaranCheckpoints],
     ["Total Research records", totalResearchRecords],
+    ["Total students", studentSummaryRows.length],
+    ["Average class percentage", averageClassPercentage],
+    ["Average improvement percentage", averageImprovementPercentage],
+    ["Students below TP3", studentsBelowTp3],
   ];
   var cabaranAverageRows = buildAverageSummaryRows_(
     cabaranRows,
@@ -1052,14 +1067,19 @@ function writeDashboardSheet_(
     "checkpointId",
     "improvementPercentage"
   );
+  var tpDistributionRows = buildCountSummaryRows_(
+    studentSummaryRows,
+    STUDENT_SUMMARY_HEADERS,
+    "latestSuggestedTP"
+  );
 
   sheet.clear();
   removeDashboardCharts_(sheet);
   sheet.getRange(1, 1, rows.length, 2).setValues(rows);
-  sheet.getRange(8, 1).setValue("Cabaran average percentage by checkpointId");
+  sheet.getRange(13, 1).setValue("Cabaran average percentage by checkpointId");
   writeSummarySection_(
     sheet,
-    9,
+    14,
     1,
     ["checkpointId", "averagePercentage"],
     cabaranAverageRows,
@@ -1068,19 +1088,19 @@ function writeDashboardSheet_(
   addDashboardChart_(
     sheet,
     "Cabaran average percentage by checkpointId",
-    9,
+    14,
     1,
     cabaranAverageRows.length,
-    8,
+    13,
     4,
     Charts.ChartType.BAR
   );
 
-  sheet.getRange(8, 4).setValue("Suggested TP count");
+  sheet.getRange(13, 10).setValue("Suggested TP count");
   writeSummarySection_(
     sheet,
-    9,
-    4,
+    14,
+    10,
     ["suggestedTP", "count"],
     suggestedTpRows,
     "Tiada rekod"
@@ -1088,18 +1108,18 @@ function writeDashboardSheet_(
   addDashboardChart_(
     sheet,
     "Suggested TP count",
-    9,
-    4,
-    suggestedTpRows.length,
-    8,
+    14,
     10,
+    suggestedTpRows.length,
+    13,
+    13,
     Charts.ChartType.BAR
   );
 
-  sheet.getRange(26, 1).setValue("Research average improvement by checkpointId");
+  sheet.getRange(32, 1).setValue("Research average improvement by checkpointId");
   writeSummarySection_(
     sheet,
-    27,
+    33,
     1,
     ["checkpointId", "averageImprovementPercentage"],
     improvementRows,
@@ -1108,15 +1128,35 @@ function writeDashboardSheet_(
   addDashboardChart_(
     sheet,
     "Research average improvement by checkpointId",
-    27,
+    33,
     1,
     improvementRows.length,
-    26,
+    32,
     4,
     Charts.ChartType.COLUMN
   );
 
-  sheet.autoResizeColumns(1, 5);
+  sheet.getRange(50, 1).setValue("TP distribution from Student_Summary");
+  writeSummarySection_(
+    sheet,
+    51,
+    1,
+    ["latestSuggestedTP", "count"],
+    tpDistributionRows,
+    "Tiada rekod"
+  );
+  addDashboardChart_(
+    sheet,
+    "TP distribution from Student_Summary",
+    51,
+    1,
+    tpDistributionRows.length,
+    50,
+    4,
+    Charts.ChartType.COLUMN
+  );
+
+  sheet.autoResizeColumns(1, 11);
 }
 
 function removeDashboardCharts_(sheet) {
@@ -1239,6 +1279,62 @@ function buildCountSummaryRows_(rows, headers, groupHeader) {
   }
 
   return result;
+}
+
+function averageStudentSummaryValue_(studentSummaryRows, headerName) {
+  var valueIndex = getHeaderIndex_(STUDENT_SUMMARY_HEADERS, headerName);
+  var sum = 0;
+  var count = 0;
+  var i;
+  var value;
+
+  if (valueIndex < 0) {
+    return "";
+  }
+
+  for (i = 0; i < studentSummaryRows.length; i += 1) {
+    value = Number((studentSummaryRows[i] || [])[valueIndex]);
+
+    if (isNaN(value)) {
+      continue;
+    }
+
+    sum += value;
+    count += 1;
+  }
+
+  return count ? roundReportNumber_(sum / count) : "";
+}
+
+function countStudentsBelowTp_(studentSummaryRows, thresholdTp) {
+  var tpIndex = getHeaderIndex_(STUDENT_SUMMARY_HEADERS, "latestSuggestedTP");
+  var threshold = parseTpLevel_(thresholdTp);
+  var count = 0;
+  var i;
+  var level;
+
+  if (tpIndex < 0 || !threshold) {
+    return 0;
+  }
+
+  for (i = 0; i < studentSummaryRows.length; i += 1) {
+    level = parseTpLevel_((studentSummaryRows[i] || [])[tpIndex]);
+
+    if (level && level < threshold) {
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
+function parseTpLevel_(value) {
+  var match = String(value || "")
+    .trim()
+    .toUpperCase()
+    .match(/^TP\s*([1-6])$/);
+
+  return match ? Number(match[1]) : 0;
 }
 
 function buildStudentSummaryRows_(cabaranRows, researchRows) {
