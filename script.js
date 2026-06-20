@@ -4847,6 +4847,138 @@
     };
   }
 
+  function splitCabaranIsland2KvkvkWord(word) {
+    const w = String(word || "").trim().toLowerCase();
+
+    if (w.length < 3) {
+      return [];
+    }
+
+    return [w.slice(0, 2), w.slice(2)];
+  }
+
+  function buildCabaranIsland2KvkvkMissingPartChoiceRound(word) {
+    const w = String(word || "").trim().toLowerCase();
+    const parts = splitCabaranIsland2KvkvkWord(w);
+
+    if (parts.length < 2) {
+      return null;
+    }
+
+    const correctAnswer = parts[1];
+    const distractors = shuffleArray(
+      BELAJAR_CONTENT.perkataan_island2_kvkvk
+        .map(function (item) {
+          return splitCabaranIsland2KvkvkWord(item)[1] || "";
+        })
+        .filter(function (part) {
+          return part && part !== correctAnswer;
+        })
+    ).slice(0, 2);
+    const options = shuffleArray([correctAnswer].concat(distractors));
+
+    return {
+      audioWord: w,
+      audioFolder: "perkataan_island2_kvkvk",
+      prefix: parts[0],
+      suffix: "",
+      correctAnswer: correctAnswer,
+      options: options,
+      correctIndex: options.indexOf(correctAnswer),
+      showBlank: true,
+      questionMode: "choice",
+    };
+  }
+
+  function buildCabaranIsland2KvkvkMissingPartTypeRound(word) {
+    const w = String(word || "").trim().toLowerCase();
+    const parts = splitCabaranIsland2KvkvkWord(w);
+
+    if (parts.length < 2) {
+      return null;
+    }
+
+    return {
+      audioWord: w,
+      audioFolder: "perkataan_island2_kvkvk",
+      prefix: parts[0],
+      suffix: "",
+      correctAnswer: parts[1],
+      showBlank: true,
+      showTypeInput: true,
+      questionMode: "type",
+    };
+  }
+
+  function buildCabaranIsland2KvkvkFullWordTypeRound(word) {
+    const w = String(word || "").trim().toLowerCase();
+
+    if (!w) {
+      return null;
+    }
+
+    return {
+      audioWord: w,
+      audioFolder: "perkataan_island2_kvkvk",
+      prefix: "",
+      suffix: "",
+      correctAnswer: w,
+      showBlank: true,
+      questionMode: "type",
+    };
+  }
+
+  function buildCabaranIsland2KvkvkQuestionSequence(total) {
+    const words = BELAJAR_CONTENT.perkataan_island2_kvkvk || [];
+    const sebutWords = buildPracticeSequence(words.slice(), CABARAN_SHORT_EASY_COUNT);
+    const choiceWords = buildPracticeSequence(words.slice(), 2);
+    const suffixTypeWords = buildPracticeSequence(words.slice(), 2);
+    const fullTypeWords = buildPracticeSequence(words.slice(), 2);
+    const rounds = [];
+
+    sebutWords.forEach(function (word) {
+      rounds.push({
+        audioWord: String(word || "").trim().toLowerCase(),
+        audioFolder: "perkataan_island2_kvkvk",
+        questionMode: "sebut",
+      });
+    });
+
+    choiceWords.forEach(function (word) {
+      const round = buildCabaranIsland2KvkvkMissingPartChoiceRound(word);
+
+      if (round) {
+        rounds.push(round);
+      }
+    });
+
+    suffixTypeWords.forEach(function (word) {
+      const round = buildCabaranIsland2KvkvkMissingPartTypeRound(word);
+
+      if (round) {
+        rounds.push(round);
+      }
+    });
+
+    fullTypeWords.forEach(function (word) {
+      const round = buildCabaranIsland2KvkvkFullWordTypeRound(word);
+
+      if (round) {
+        rounds.push(round);
+      }
+    });
+
+    while (rounds.length < total) {
+      rounds.push({
+        audioWord: String(words[0] || "kasut").trim().toLowerCase(),
+        audioFolder: "perkataan_island2_kvkvk",
+        questionMode: "sebut",
+      });
+    }
+
+    return rounds.slice(0, total);
+  }
+
   function buildCabaranKvkvQuestionSequence(total) {
     const sebutWords = buildPracticeSequence(
       BELAJAR_CONTENT.perkataan_kvkv.slice(),
@@ -5035,6 +5167,13 @@
 
     if (selectedCheckpoint === "perkataan_kvkv") {
       cabaranQuestionItems = buildCabaranKvkvQuestionSequence(
+        CABARAN_TOTAL_QUESTIONS
+      );
+      return;
+    }
+
+    if (selectedCheckpoint === "perkataan_island2_kvkvk") {
+      cabaranQuestionItems = buildCabaranIsland2KvkvkQuestionSequence(
         CABARAN_TOTAL_QUESTIONS
       );
       return;
