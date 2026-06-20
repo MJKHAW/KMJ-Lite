@@ -106,6 +106,7 @@
     suku_kata_kv: "suku_kata_kv",
     perkataan_vkv: "perkataan_vkv",
     perkataan_kvkv: "perkataan_kvkv",
+    perkataan_island2_kvkvk: "perkataan_island2_kvkvk",
   };
 
   let dbPromise = null;

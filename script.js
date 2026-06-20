@@ -536,6 +536,7 @@
       "buku", "bola", "baju", "kaki", "mata", "susu",
       "roti", "gigi", "kuda", "topi",
     ],
+    perkataan_island2_kvkvk: ["kasut", "mulut", "rumah", "semut", "kapal"],
   };
 
   const SUKU_KATA_KV_LEVELS = [
@@ -568,6 +569,7 @@
     suku_kata_kv: "7rem",
     perkataan_vkv: "6.6rem",
     perkataan_kvkv: "6.6rem",
+    perkataan_island2_kvkvk: "6.2rem",
   };
 
   const BELAJAR_WRITING_ZONE_STYLE =
@@ -583,6 +585,7 @@
     "suku_kata_kv",
     "perkataan_vkv",
     "perkataan_kvkv",
+    "perkataan_island2_kvkvk",
   ];
 
   const BELAJAR_AUDIO_FOLDERS = {
@@ -591,6 +594,7 @@
     suku_kata_kv: "suku_kata_kv",
     perkataan_vkv: "perkataan_vkv",
     perkataan_kvkv: "perkataan_kvkv",
+    perkataan_island2_kvkvk: "perkataan_island2_kvkvk",
   };
 
   const PRONUNCIATION_FEEDBACK = {
@@ -3533,7 +3537,8 @@
   function isLatihanSusunCheckpointEligible() {
     return (
       selectedCheckpoint === "perkataan_vkv" ||
-      selectedCheckpoint === "perkataan_kvkv"
+      selectedCheckpoint === "perkataan_kvkv" ||
+      selectedCheckpoint === "perkataan_island2_kvkvk"
     );
   }
 
@@ -3556,7 +3561,8 @@
   function isCabaranWordCheckpoint() {
     return (
       selectedCheckpoint === "perkataan_vkv" ||
-      selectedCheckpoint === "perkataan_kvkv"
+      selectedCheckpoint === "perkataan_kvkv" ||
+      selectedCheckpoint === "perkataan_island2_kvkvk"
     );
   }
 
