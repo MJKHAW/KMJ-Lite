@@ -654,6 +654,19 @@
     "display:flex;flex-direction:column;align-items:center;justify-content:center;" +
     "text-align:center;pointer-events:none;overflow:visible;";
 
+  const BELAJAR_WORD_IMAGE_STYLE =
+    "position:absolute;left:39.8%;top:45.2%;width:20.4%;height:11.475%;" +
+    "object-fit:contain;object-position:center;display:none;" +
+    "pointer-events:none;z-index:1;";
+
+  const BELAJAR_ISLAND2_KVKVK_IMAGE_WORDS = {
+    kapal: true,
+    kasut: true,
+    mulut: true,
+    rumah: true,
+    semut: true,
+  };
+
   const BELAJAR_LEVEL_FONT_SIZE = "1.1rem";
 
   const BELAJAR_AUDIO_CHECKPOINTS = [
@@ -714,6 +727,7 @@
   let belajarLevelItemIndex = 0;
   let belajarLevelDisplay = null;
   let belajarWordDisplay = null;
+  let belajarWordImage = null;
   let belajarFeedback = null;
   let belajarStudentSyncBadge = null;
   let belajarAudio = null;
@@ -3427,6 +3441,18 @@
         writingZone.appendChild(belajarLevelDisplay);
         writingZone.appendChild(belajarWordDisplay);
         section.appendChild(writingZone);
+
+        belajarWordImage = document.createElement("img");
+        belajarWordImage.id = "belajar-word-image";
+        belajarWordImage.alt = "";
+        belajarWordImage.decoding = "async";
+        belajarWordImage.draggable = false;
+        belajarWordImage.style.cssText = BELAJAR_WORD_IMAGE_STYLE;
+        belajarWordImage.style.pointerEvents = "none";
+        belajarWordImage.addEventListener("error", function () {
+          hideBelajarWordImage();
+        });
+        section.appendChild(belajarWordImage);
 
         belajarFeedback = createPronunciationFeedbackElement(section);
         belajarFeedback.id = "belajar-feedback";
@@ -12115,6 +12141,70 @@
     updateBelajarWordDisplay();
   }
 
+  function hideBelajarWordImage() {
+    if (belajarWordImage) {
+      belajarWordImage.style.display = "none";
+      belajarWordImage.style.pointerEvents = "none";
+      belajarWordImage.removeAttribute("src");
+      belajarWordImage.alt = "";
+    }
+  }
+
+  function showBelajarWordImage(src, word) {
+    if (!belajarWordImage || !src) {
+      hideBelajarWordImage();
+      return;
+    }
+
+    function reveal() {
+      if (!belajarWordImage || belajarWordImage.getAttribute("src") !== src) {
+        return;
+      }
+
+      belajarWordImage.style.pointerEvents = "none";
+      belajarWordImage.style.display = "block";
+    }
+
+    belajarWordImage.alt = String(word || "");
+    belajarWordImage.style.pointerEvents = "none";
+    belajarWordImage.onload = function () {
+      reveal();
+    };
+
+    if (
+      belajarWordImage.getAttribute("src") === src &&
+      belajarWordImage.complete &&
+      belajarWordImage.naturalWidth > 0
+    ) {
+      reveal();
+      return;
+    }
+
+    belajarWordImage.style.display = "none";
+    belajarWordImage.src = src;
+  }
+
+  function updateBelajarWordImage(word) {
+    if (selectedCheckpoint !== "perkataan_island2_kvkvk") {
+      hideBelajarWordImage();
+      return;
+    }
+
+    const key = String(word || "")
+      .trim()
+      .toLowerCase();
+
+    if (!key || !BELAJAR_ISLAND2_KVKVK_IMAGE_WORDS[key]) {
+      hideBelajarWordImage();
+      return;
+    }
+
+    showBelajarWordImage(
+      "assets/images/perkataan/KVKVK/" + key + ".png",
+      key
+    );
+  }
+
   function updateBelajarWordDisplay(options) {
     if (!belajarWordDisplay) {
       return;
@@ -12137,6 +12227,7 @@
 
       belajarWordDisplay.textContent = item;
       applyBelajarTypography();
+      hideBelajarWordImage();
 
       if (autoPlayBelajar) {
         playBelajarAudio();
@@ -12155,6 +12246,7 @@
 
     belajarWordDisplay.textContent = item;
     applyBelajarTypography();
+    updateBelajarWordImage(item);
 
     if (autoPlayBelajar) {
       playBelajarAudio();
