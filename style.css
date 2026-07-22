@@ -107,6 +107,31 @@ body.debug-hotspots .hotspot {
   box-sizing: border-box;
 }
 
+/* TEMP: island2 hotspot calibration — disable via DEBUG_ISLAND2_HOTSPOTS in script.js */
+#screen-island2.debug-island2-hotspots .hotspot {
+  background: rgba(255, 0, 0, 0.35);
+  border: 2px solid rgba(255, 0, 0, 0.9);
+  box-sizing: border-box;
+}
+
+#screen-island2.debug-island2-hotspots .hotspot::after {
+  content: attr(data-debug-label);
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  max-width: calc(100% - 4px);
+  padding: 1px 3px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: left;
+  pointer-events: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Cabaran feedback — boxless text (Betul ⭐ / Cuba lagi 😊); size via feedbackText.fontSize */
 #cabaran-feedback {
   background: transparent !important;

@@ -5,6 +5,8 @@
   const DEBUG_TULIS_HOTSPOTS = false;
   /** Set true to show red outline boxes for every Cabaran HTML overlay (adjust CABARAN_OVERLAY_LAYOUT). */
   const DEBUG_CABARAN_LAYOUT = false;
+  /** TEMP: set false after island2 hotspot calibration. Outlines island2 hotspots only. */
+  const DEBUG_ISLAND2_HOTSPOTS = true;
   const LATIHAN_CALIBRATION_MODE = false;
   const LATIHAN_EASY_ADJUST_MODE = false;
 
@@ -267,8 +269,8 @@
           top: 77.6,
           width: 29.25,
           height: 13,
-          action: "alert",
-          message: "Pulau 2 akan datang",
+          action: "go",
+          target: "island2",
         },
       ],
     },
@@ -345,6 +347,82 @@
         },
       ],
     },
+    island2: {
+      image: "assets/island2.png",
+      hotspots: [
+        // Same Canva grid as island1 — tune with DEBUG_ISLAND2_HOTSPOTS
+        {
+          id: "menu",
+          label: "Menu",
+          left: 10,
+          top: 4,
+          width: 11,
+          height: 6,
+          action: "go",
+          target: "map",
+        },
+        {
+          id: "close",
+          label: "Tutup",
+          left: 84,
+          top: 4,
+          width: 11,
+          height: 6,
+          action: "alert",
+          message: "Keluar aplikasi?",
+        },
+        // CP6–CP10: 33/24/43/10 … 33/75/43/10 (same spacing as island1)
+        {
+          id: "suku_kata_kvk",
+          label: "Suku Kata KVK",
+          left: 33,
+          top: 24,
+          width: 43,
+          height: 10,
+          action: "alert",
+          message: "Akan datang",
+        },
+        {
+          id: "perkataan_kvk",
+          label: "Perkataan KVK",
+          left: 33,
+          top: 35,
+          width: 43,
+          height: 10,
+          action: "alert",
+          message: "Akan datang",
+        },
+        {
+          id: "perkataan_vkvk",
+          label: "Perkataan VKVK",
+          left: 33,
+          top: 49,
+          width: 43,
+          height: 10,
+          action: "alert",
+          message: "Akan datang",
+        },
+        {
+          id: "perkataan_island2_kvkvk",
+          label: "Perkataan KVKVK",
+          left: 33,
+          top: 61,
+          width: 43,
+          height: 10,
+          action: "transition",
+        },
+        {
+          id: "perkataan_kvkvkv",
+          label: "Perkataan KVKVKV",
+          left: 33,
+          top: 75,
+          width: 43,
+          height: 10,
+          action: "alert",
+          message: "Akan datang",
+        },
+      ],
+    },
     transition: {
       image: "assets/transition.png",
       hotspots: [],
@@ -354,13 +432,12 @@
       hotspots: [
         {
           id: "screen_back",
-          label: "Kembali ke Kampung",
+          label: "Kembali ke pulau",
           left: 8.3,
           top: 3.8,
           width: 6.9,
           height: 4.9,
-          action: "go",
-          target: "island1",
+          action: "belajar-back",
         },
         {
           id: "close",
@@ -3379,6 +3456,10 @@
         setupTulisScreen(section);
       }
 
+      if (name === "island2") {
+        section.classList.toggle("debug-island2-hotspots", DEBUG_ISLAND2_HOTSPOTS);
+      }
+
       const screenHotspots =
         name === "latihan"
           ? createLatihanHotspotConfigs()
@@ -3813,6 +3894,12 @@
     const session = getCabaranStudentSession();
 
     if (!session || !selectedCheckpoint) {
+      // TEMP DEBUG — remove after unlock diagnosis
+      console.log("[CabaranUnlockDebug] markCabaranLearningStep skipped", {
+        step: step,
+        checkpointId: selectedCheckpoint || null,
+        hasSession: !!session,
+      });
       return Promise.resolve();
     }
 
@@ -3844,7 +3931,22 @@
         }
 
         record.updatedAt = new Date().toISOString();
-        return cabaranStorePut(CABARAN_LEARNING_UNLOCKS_STORE, record);
+        return cabaranStorePut(CABARAN_LEARNING_UNLOCKS_STORE, record).then(
+          function () {
+            // TEMP DEBUG — remove after unlock diagnosis
+            console.log("[CabaranUnlockDebug] markCabaranLearningStep saved", {
+              step: step,
+              checkpointId: selectedCheckpoint,
+              unlockKey: unlockKey,
+              savedRecord: {
+                belajarComplete: !!record.belajarComplete,
+                latihanChoiceComplete: !!record.latihanChoiceComplete,
+                latihanSusunComplete: !!record.latihanSusunComplete,
+              },
+            });
+            return record;
+          }
+        );
       }
     );
   }
@@ -3853,22 +3955,51 @@
     const session = getCabaranStudentSession();
 
     if (!session || !selectedCheckpoint) {
+      // TEMP DEBUG — remove after unlock diagnosis
+      console.log("[CabaranUnlockDebug] canAccessCabaran return", {
+        unlockKey: null,
+        selectedCheckpoint: selectedCheckpoint || null,
+        schoolCode: getCabaranSchoolCode(),
+        classId: session ? session.classId : null,
+        studentId: session ? session.studentId : null,
+        record: null,
+        result: false,
+        reason: !session ? "no_session" : "no_selectedCheckpoint",
+      });
       return Promise.resolve(false);
     }
 
     const unlockKey = buildCabaranUnlockKey(session, selectedCheckpoint);
+    const schoolCode = getCabaranSchoolCode();
 
     return cabaranStoreGet(CABARAN_LEARNING_UNLOCKS_STORE, unlockKey).then(
       function (record) {
+        let result;
+
         if (!record || !record.belajarComplete || !record.latihanChoiceComplete) {
-          return false;
+          result = false;
+        } else if (isCabaranWordCheckpoint()) {
+          result = !!record.latihanSusunComplete;
+        } else {
+          result = true;
         }
 
-        if (isCabaranWordCheckpoint()) {
-          return !!record.latihanSusunComplete;
-        }
+        // TEMP DEBUG — remove after unlock diagnosis
+        console.log("[CabaranUnlockDebug] canAccessCabaran return", {
+          unlockKey: unlockKey,
+          selectedCheckpoint: selectedCheckpoint,
+          schoolCode: schoolCode,
+          classId: session.classId,
+          studentId: session.studentId,
+          record: {
+            belajarComplete: !!(record && record.belajarComplete),
+            latihanChoiceComplete: !!(record && record.latihanChoiceComplete),
+            latihanSusunComplete: !!(record && record.latihanSusunComplete),
+          },
+          result: result,
+        });
 
-        return true;
+        return result;
       }
     );
   }
@@ -7244,6 +7375,20 @@
     applyCabaranDebugMode();
   }
 
+  function getSelectedCheckpointHomeScreen() {
+    if (
+      selectedCheckpoint === "suku_kata_kvk" ||
+      selectedCheckpoint === "perkataan_kvk" ||
+      selectedCheckpoint === "perkataan_vkvk" ||
+      selectedCheckpoint === "perkataan_island2_kvkvk" ||
+      selectedCheckpoint === "perkataan_kvkvkv"
+    ) {
+      return "island2";
+    }
+
+    return "island1";
+  }
+
   function returnToCurrentCheckpointSubmenu() {
     clearCabaranAdvanceTimer();
     clearCabaranCountdownTimer();
@@ -7254,7 +7399,7 @@
     cabaranQuestionLocked = false;
     cabaranBusy = false;
     stopBelajarAudio();
-    showScreen("island1");
+    showScreen(getSelectedCheckpointHomeScreen());
   }
 
   function exitCabaranToHome() {
@@ -12129,6 +12274,11 @@
       return;
     }
 
+    if (action === "belajar-back") {
+      showScreen(getSelectedCheckpointHomeScreen());
+      return;
+    }
+
     if (action === "transition") {
       if (btn.dataset.hotspot) {
         selectedCheckpoint = btn.dataset.hotspot;
@@ -12217,6 +12367,36 @@
     }
   }
 
+  function getDevCheckpointLaunchTarget() {
+    const allowedCheckpoint = "perkataan_island2_kvkvk";
+    const allowedScreens = ["belajar", "latihan", "latihan_susun", "cabaran"];
+    let params;
+    let checkpoint;
+    let screen;
+
+    try {
+      params = new URLSearchParams(window.location.search || "");
+    } catch (error) {
+      return null;
+    }
+
+    checkpoint = String(params.get("devCheckpoint") || "").trim();
+    screen = String(params.get("devScreen") || "").trim();
+
+    if (checkpoint !== allowedCheckpoint) {
+      return null;
+    }
+
+    if (allowedScreens.indexOf(screen) === -1) {
+      return null;
+    }
+
+    return {
+      checkpoint: checkpoint,
+      screen: screen,
+    };
+  }
+
   if (DEBUG_CABARAN_LAYOUT) {
     loadCabaranLayoutDebugFromStorage();
   }
@@ -12239,6 +12419,15 @@
       } else {
         setTeacherMode(false);
       }
+    }
+
+    const devLaunch = getDevCheckpointLaunchTarget();
+
+    // TEMP DEV TEST ONLY - remove before production.
+    if (devLaunch) {
+      selectedCheckpoint = devLaunch.checkpoint;
+      showScreen(devLaunch.screen);
+      return;
     }
 
     showScreen("home");
