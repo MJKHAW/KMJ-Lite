@@ -659,6 +659,20 @@
     "object-fit:contain;object-position:center;display:none;" +
     "pointer-events:none;z-index:1;";
 
+  const LATIHAN_CHOICE_WORD_IMAGE_STYLE =
+    "position:absolute;left:50%;top:24.5%;width:18%;height:10.125%;" +
+    "object-fit:contain;object-position:center;display:none;" +
+    "pointer-events:none;z-index:8;";
+
+  const LATIHAN_CHOICE_WORD_LABEL_STYLE =
+    "position:absolute;left:50%;top:21.2%;width:18%;height:2.6%;" +
+    "margin:0;padding:0;display:none;align-items:center;justify-content:center;" +
+    "text-align:center;pointer-events:none;z-index:8;box-sizing:border-box;" +
+    "font-family:" +
+    BELAJAR_FONT +
+    ";font-weight:700;font-size:clamp(1.35rem,5vmin,2.1rem);line-height:1;" +
+    "color:#2a1f14;text-shadow:0 1px 2px rgba(255,255,255,0.85);";
+
   const BELAJAR_ISLAND2_KVKVK_IMAGE_WORDS = {
     kapal: true,
     kasut: true,
@@ -759,6 +773,8 @@
   let latihanChoiceWrongAttempts = 0;
   let latihanChoiceAnsweredCorrectly = false;
   let latihanChoiceHintVisible = false;
+  let latihanChoiceWordImage = null;
+  let latihanChoiceWordLabel = null;
   let latihanCompletionOverlayEl = null;
   let latihanCompletionSecondaryBtn = null;
   const CABARAN_TOTAL_QUESTIONS = 10;
@@ -8212,6 +8228,12 @@
       return;
     }
 
+    // Island2 KVKVK uses #latihan-choice-word-label only — avoid a second answer word.
+    if (selectedCheckpoint === "perkataan_island2_kvkvk") {
+      hideLatihanReinforcement();
+      return;
+    }
+
     const word = String(target || "").trim().toLowerCase();
     const breakdown = buildLatihanSyllableBreakdown(word);
 
@@ -8562,6 +8584,28 @@
     });
 
     zone.appendChild(answersWrap);
+
+    latihanChoiceWordLabel = document.createElement("p");
+    latihanChoiceWordLabel.id = "latihan-choice-word-label";
+    latihanChoiceWordLabel.setAttribute("aria-live", "polite");
+    latihanChoiceWordLabel.setAttribute("aria-hidden", "true");
+    latihanChoiceWordLabel.style.cssText = LATIHAN_CHOICE_WORD_LABEL_STYLE;
+    latihanChoiceWordLabel.style.pointerEvents = "none";
+    latihanChoiceWordLabel.style.visibility = "hidden";
+    zone.appendChild(latihanChoiceWordLabel);
+
+    latihanChoiceWordImage = document.createElement("img");
+    latihanChoiceWordImage.id = "latihan-choice-word-image";
+    latihanChoiceWordImage.alt = "";
+    latihanChoiceWordImage.decoding = "async";
+    latihanChoiceWordImage.draggable = false;
+    latihanChoiceWordImage.style.cssText = LATIHAN_CHOICE_WORD_IMAGE_STYLE;
+    latihanChoiceWordImage.style.pointerEvents = "none";
+    latihanChoiceWordImage.addEventListener("error", function () {
+      hideLatihanChoiceWordImage();
+    });
+    zone.appendChild(latihanChoiceWordImage);
+
     section.appendChild(zone);
 
     latihanFeedback = createPronunciationFeedbackElement(section);
@@ -8631,6 +8675,8 @@
     updateLatihanChoiceProgress();
     hideLatihanPersistentHint();
     hideLatihanReinforcement();
+    hideLatihanChoiceWordLabel();
+    updateLatihanChoiceWordImage(getLatihanChoiceTargetItem());
     applyLatihanLayout();
     setLatihanDebugLabels();
   }
@@ -8665,6 +8711,10 @@
     const isCorrect = index === latihanChoiceCorrectIndex;
     const selectedBtn = latihanChoiceAnswerEls[index];
     const targetWord = getLatihanChoiceTargetItem();
+    const isIsland2Kvkvk = selectedCheckpoint === "perkataan_island2_kvkvk";
+    const revealWord = String(targetWord || "")
+      .trim()
+      .toLowerCase();
 
     latihanChoiceAnswerEls.forEach(function (btn, btnIndex) {
       btn.classList.remove(
@@ -8690,6 +8740,10 @@
       latihanChoiceAnsweredCorrectly = true;
       hideLatihanPersistentHint();
 
+      if (isIsland2Kvkvk && revealWord) {
+        showLatihanChoiceWordLabel(revealWord);
+      }
+
       if (selectedBtn) {
         selectedBtn.classList.add("is-pop");
       }
@@ -8712,7 +8766,13 @@
         }
 
         hidePronunciationFeedback(latihanFeedback);
-        showLatihanReinforcement(targetWord);
+
+        // Island2 KVKVK: reveal word only via #latihan-choice-word-label (above picture).
+        // Skip the old reinforcement word overlay so two answer words never appear.
+        if (!isIsland2Kvkvk) {
+          showLatihanReinforcement(targetWord);
+        }
+
         pulseLatihanSeterusnyaHotspot();
       }, LATIHAN_FEEDBACK_HIDE_MS);
 
@@ -8723,13 +8783,64 @@
     hideLatihanPersistentHint();
 
     if (latihanChoiceWrongAttempts === 1) {
+      if (isIsland2Kvkvk) {
+        hideLatihanChoiceWordLabel();
+      }
+
       showLatihanFeedbackMessage("Cuba lagi 😊");
       playLatihanChoiceAudio({ silentAutoplay: true });
-    } else {
+
+      latihanChoiceResetTimer = window.setTimeout(function () {
+        latihanChoiceResetTimer = null;
+        resetLatihanChoiceAnswerStyles();
+
+        if (isIsland2Kvkvk) {
+          hideLatihanChoiceWordLabel();
+        }
+      }, LATIHAN_FEEDBACK_HIDE_MS);
+
+      return;
+    }
+
+    // Second wrong attempt
+    if (isIsland2Kvkvk) {
+      if (revealWord) {
+        showLatihanChoiceWordLabel(revealWord);
+      }
+
+      latihanChoiceAnswerEls.forEach(function (btn, btnIndex) {
+        btn.classList.remove(
+          "is-selected",
+          "is-correct",
+          "is-wrong",
+          "is-shake",
+          "is-tapped",
+          "is-pop"
+        );
+        btn.disabled = true;
+
+        if (btnIndex === latihanChoiceCorrectIndex) {
+          btn.classList.add("is-correct");
+        }
+
+        if (btnIndex === index) {
+          btn.classList.add("is-wrong");
+        }
+      });
+
       showLatihanFeedbackMessage(buildLatihanChoiceHint(targetWord), {
         autoHide: false,
       });
+
+      // Allow Seterusnya (including final question) after answer is revealed.
+      latihanChoiceAnsweredCorrectly = true;
+      pulseLatihanSeterusnyaHotspot();
+      return;
     }
+
+    showLatihanFeedbackMessage(buildLatihanChoiceHint(targetWord), {
+      autoHide: false,
+    });
 
     latihanChoiceResetTimer = window.setTimeout(function () {
       latihanChoiceResetTimer = null;
@@ -12150,38 +12261,66 @@
     }
   }
 
+  function getIsland2KvkvkImageSrc(word) {
+    const key = String(word || "")
+      .trim()
+      .toLowerCase();
+
+    if (!key || !BELAJAR_ISLAND2_KVKVK_IMAGE_WORDS[key]) {
+      return null;
+    }
+
+    return "assets/images/perkataan/KVKVK/" + key + ".png";
+  }
+
+  function setWordImageElement(imgEl, src, word) {
+    if (!imgEl) {
+      return;
+    }
+
+    if (!src) {
+      imgEl.style.display = "none";
+      imgEl.style.pointerEvents = "none";
+      imgEl.removeAttribute("src");
+      imgEl.alt = "";
+      return;
+    }
+
+    function reveal() {
+      if (!imgEl || imgEl.getAttribute("src") !== src) {
+        return;
+      }
+
+      imgEl.style.pointerEvents = "none";
+      imgEl.style.display = "block";
+    }
+
+    imgEl.alt = String(word || "");
+    imgEl.style.pointerEvents = "none";
+    imgEl.onload = function () {
+      reveal();
+    };
+
+    if (
+      imgEl.getAttribute("src") === src &&
+      imgEl.complete &&
+      imgEl.naturalWidth > 0
+    ) {
+      reveal();
+      return;
+    }
+
+    imgEl.style.display = "none";
+    imgEl.src = src;
+  }
+
   function showBelajarWordImage(src, word) {
     if (!belajarWordImage || !src) {
       hideBelajarWordImage();
       return;
     }
 
-    function reveal() {
-      if (!belajarWordImage || belajarWordImage.getAttribute("src") !== src) {
-        return;
-      }
-
-      belajarWordImage.style.pointerEvents = "none";
-      belajarWordImage.style.display = "block";
-    }
-
-    belajarWordImage.alt = String(word || "");
-    belajarWordImage.style.pointerEvents = "none";
-    belajarWordImage.onload = function () {
-      reveal();
-    };
-
-    if (
-      belajarWordImage.getAttribute("src") === src &&
-      belajarWordImage.complete &&
-      belajarWordImage.naturalWidth > 0
-    ) {
-      reveal();
-      return;
-    }
-
-    belajarWordImage.style.display = "none";
-    belajarWordImage.src = src;
+    setWordImageElement(belajarWordImage, src, word);
   }
 
   function updateBelajarWordImage(word) {
@@ -12190,19 +12329,74 @@
       return;
     }
 
-    const key = String(word || "")
-      .trim()
-      .toLowerCase();
+    const src = getIsland2KvkvkImageSrc(word);
 
-    if (!key || !BELAJAR_ISLAND2_KVKVK_IMAGE_WORDS[key]) {
+    if (!src) {
       hideBelajarWordImage();
       return;
     }
 
-    showBelajarWordImage(
-      "assets/images/perkataan/KVKVK/" + key + ".png",
-      key
-    );
+    showBelajarWordImage(src, String(word || "").trim().toLowerCase());
+  }
+
+  function hideLatihanChoiceWordLabel() {
+    if (!latihanChoiceWordLabel) {
+      return;
+    }
+
+    latihanChoiceWordLabel.textContent = "";
+    latihanChoiceWordLabel.style.display = "none";
+    latihanChoiceWordLabel.style.visibility = "hidden";
+    latihanChoiceWordLabel.setAttribute("aria-hidden", "true");
+  }
+
+  function showLatihanChoiceWordLabel(word) {
+    if (!latihanChoiceWordLabel) {
+      return;
+    }
+
+    const text = String(word || "").trim();
+
+    if (!text) {
+      hideLatihanChoiceWordLabel();
+      return;
+    }
+
+    latihanChoiceWordLabel.textContent = text;
+    latihanChoiceWordLabel.style.visibility = "visible";
+    latihanChoiceWordLabel.style.display = "flex";
+    latihanChoiceWordLabel.style.pointerEvents = "none";
+    latihanChoiceWordLabel.setAttribute("aria-hidden", "false");
+  }
+
+  function hideLatihanChoiceWordImage() {
+    setWordImageElement(latihanChoiceWordImage, null, "");
+  }
+
+  function hideLatihanChoiceWordVisuals() {
+    hideLatihanChoiceWordLabel();
+    hideLatihanChoiceWordImage();
+  }
+
+  function updateLatihanChoiceWordImage(word) {
+    if (selectedCheckpoint !== "perkataan_island2_kvkvk") {
+      hideLatihanChoiceWordVisuals();
+      return;
+    }
+
+    const key = String(word || "")
+      .trim()
+      .toLowerCase();
+    const src = getIsland2KvkvkImageSrc(key);
+
+    if (!key || !src) {
+      hideLatihanChoiceWordVisuals();
+      return;
+    }
+
+    // New question: picture only — never reveal the answer word yet.
+    hideLatihanChoiceWordLabel();
+    setWordImageElement(latihanChoiceWordImage, src, "");
   }
 
   function updateBelajarWordDisplay(options) {
