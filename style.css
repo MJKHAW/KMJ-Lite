@@ -83,6 +83,12 @@ body {
   z-index: 8;
 }
 
+/* Decorative only — must never intercept Susun drag/drop. */
+#latihan-susun-word-image {
+  pointer-events: none !important;
+  z-index: 8;
+}
+
 .hotspot:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.65);
   outline-offset: 2px;
@@ -1327,6 +1333,34 @@ body.debug-hotspots .hotspot::after {
   box-sizing: border-box;
   padding: 0.25em 0.35em;
   pointer-events: auto;
+}
+
+/*
+ * Revealed target word — centered in cream PILIH DAN SERET area (#latihan-susun-drag).
+ * Position is relative to drag parent (LATIHAN_SUSUN_LAYOUT.dragSlots), below PNG title band.
+ */
+#latihan-susun-word-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 28%;
+  bottom: 8%;
+  width: auto;
+  margin: 0;
+  padding: 0 0.35em;
+  box-sizing: border-box;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none !important;
+  z-index: 9;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", Arial, sans-serif;
+  font-weight: 700;
+  font-size: clamp(1.8rem, 7.2vmin, 3rem);
+  line-height: 1.1;
+  color: #2a1f14;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.9);
 }
 
 .latihan-susun-slot {
