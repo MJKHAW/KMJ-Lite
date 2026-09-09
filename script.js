@@ -110,6 +110,33 @@
   const CABARAN_SHORT_MEDIUM_COUNT = 3;
   const CABARAN_SHORT_HARD_COUNT = 3;
 
+  const CABARAN_ISLAND2_KVKVK_SYLLABLES = {
+    kapal: ["ka", "pal"],
+    kasut: ["ka", "sut"],
+    mulut: ["mu", "lut"],
+    rumah: ["ru", "mah"],
+    semut: ["se", "mut"],
+  };
+
+  const CABARAN_ISLAND2_BINA_COUNT = 3;
+
+  /* Stacked in the central activity band below progress, above Ulang/timer. */
+  const CABARAN_ISLAND2_BINA_LAYOUT = {
+    picture: { left: 36, top: 29.2, width: 28, height: 11 },
+    syllableCard: { left: 18, top: 41.2, width: 64, height: 8 },
+    instruction: { left: 12, top: 50, width: 76, height: 4.2 },
+    typingInput: { left: 12.1, top: 54.8, width: 61.5, height: 11.5, fontSize: 3.2 },
+    typingSubmit: { left: 75.8, top: 56.4, width: 14.2, height: 7.8, fontSize: 4.2 },
+    feedbackText: { left: 18, top: 68, width: 64, height: 6, fontSize: 2.6 },
+  };
+
+  const CABARAN_ISLAND2_TEKA_ANSWER_FEEDBACK = {
+    left: 22,
+    top: 71.8,
+    width: 56,
+    height: 6.6,
+  };
+
   /** Measured from assets/tulis.png (1080x1920). */
   const TULIS_BOTTOM_HOTSPOT_RECTS = [
     { id: "tulis_kembali", left: 5.6, top: 76.6, width: 21.5, height: 10.4 },
@@ -678,6 +705,20 @@
     "object-fit:contain;object-position:center;display:none;" +
     "pointer-events:none;z-index:8;";
 
+  const CABARAN_WORD_IMAGE_STYLE =
+    "position:absolute;left:52%;top:20%;width:18%;height:10.125%;" +
+    "object-fit:contain;object-position:center;display:none;" +
+    "pointer-events:none;z-index:8;";
+
+  const CABARAN_WORD_LABEL_STYLE =
+    "position:absolute;left:52%;top:17%;width:18%;height:2.6%;" +
+    "margin:0;padding:0;display:none;align-items:center;justify-content:center;" +
+    "text-align:center;pointer-events:none;z-index:8;box-sizing:border-box;" +
+    "font-family:" +
+    BELAJAR_FONT +
+    ";font-weight:700;font-size:clamp(1.35rem,5vmin,2.1rem);line-height:1;" +
+    "color:#2a1f14;text-shadow:0 1px 2px rgba(255,255,255,0.85);";
+
   const BELAJAR_ISLAND2_KVKVK_IMAGE_WORDS = {
     kapal: true,
     kasut: true,
@@ -823,6 +864,14 @@
   let cabaranTypeInputEl = null;
   let cabaranTypeSubmitBtn = null;
   let cabaranTargetEl = null;
+  let cabaranWordImage = null;
+  let cabaranWordLabel = null;
+  let cabaranKvkvkSyllableCardEl = null;
+  let cabaranKvkvkSyllableLeftEl = null;
+  let cabaranKvkvkSyllableRightEl = null;
+  let cabaranKvkvkSyllableRevealed = false;
+  let cabaranKvkvkBinaAttempts = 0;
+  let cabaranKvkvkTekaAttempts = 0;
   let cabaranAnswersEl = null;
   let cabaranAnswerBtns = [];
   let cabaranSusunAnswerEl = null;
@@ -3737,6 +3786,40 @@
     );
   }
 
+  function isCabaranIsland2KvkvkSebutQuestion() {
+    return (
+      selectedCheckpoint === "perkataan_island2_kvkvk" &&
+      getCabaranQuestionMode() === "sebut"
+    );
+  }
+
+  function isCabaranIsland2KvkvkPictureQuestion() {
+    return (
+      selectedCheckpoint === "perkataan_island2_kvkvk" &&
+      getCabaranQuestionMode() !== "sebut"
+    );
+  }
+
+  function isCabaranIsland2KvkvkBinaQuestion() {
+    const round = getCabaranCurrentRound();
+
+    return (
+      selectedCheckpoint === "perkataan_island2_kvkvk" &&
+      !!round &&
+      round.kvkvkActivity === "bina"
+    );
+  }
+
+  function isCabaranIsland2KvkvkTekaQuestion() {
+    const round = getCabaranCurrentRound();
+
+    return (
+      selectedCheckpoint === "perkataan_island2_kvkvk" &&
+      !!round &&
+      round.kvkvkActivity === "teka"
+    );
+  }
+
   function getCabaranSuggestedTP(totalCorrect) {
     if (totalCorrect >= 10) {
       return "TP6";
@@ -4363,6 +4446,21 @@
     applyOverlay("progressBox", cabaranProgressEl);
     applyOverlay("instructionText", cabaranQuestionEl);
     applyOverlay("blankQuestion", cabaranBlankQuestionEl);
+
+    if (isCabaranIsland2KvkvkBinaQuestion() && cabaranBlankQuestionEl) {
+      applyCabaranOverlayRect(cabaranBlankQuestionEl, CABARAN_ISLAND2_BINA_LAYOUT.picture);
+      cabaranBlankQuestionEl.style.pointerEvents = "none";
+      applyCabaranOverlayRect(cabaranQuestionEl, CABARAN_ISLAND2_BINA_LAYOUT.instruction);
+    } else if (isCabaranIsland2KvkvkPictureQuestion() && cabaranBlankQuestionEl) {
+      applyCabaranOverlayRect(cabaranBlankQuestionEl, {
+        left: 11.6,
+        top: 38,
+        width: 77,
+        height: 15.2,
+      });
+      cabaranBlankQuestionEl.style.pointerEvents = "none";
+    }
+
     applyOverlay("audioVisual", cabaranAudioVisualEl);
     applyOverlay("targetWord", cabaranTargetEl);
     ["answerA", "answerB", "answerC"].forEach(function (layoutKey, index) {
@@ -4416,6 +4514,7 @@
 
     syncCabaranTypingDebugCalibration();
     bindCabaranTypingSubmitLayout();
+    applyCabaranIsland2BinaLayout();
 
     if (getCabaranQuestionMode() === "type" && cabaranBlankQuestionEl) {
       cabaranBlankQuestionEl.style.zIndex = "9";
@@ -5070,12 +5169,41 @@
 
   function splitCabaranIsland2KvkvkWord(word) {
     const w = String(word || "").trim().toLowerCase();
+    const mapped = CABARAN_ISLAND2_KVKVK_SYLLABLES[w];
+
+    if (mapped && mapped.length === 2) {
+      return mapped.slice();
+    }
 
     if (w.length < 3) {
       return [];
     }
 
     return [w.slice(0, 2), w.slice(2)];
+  }
+
+  function buildCabaranIsland2KvkvkBinaRound(word) {
+    const w = String(word || "").trim().toLowerCase();
+    const parts = splitCabaranIsland2KvkvkWord(w);
+
+    if (parts.length < 2) {
+      return null;
+    }
+
+    const missingSide = Math.random() < 0.5 ? "left" : "right";
+
+    return {
+      audioWord: w,
+      audioFolder: "perkataan_island2_kvkvk",
+      leftSyllable: parts[0],
+      rightSyllable: parts[1],
+      missingSide: missingSide,
+      correctAnswer: missingSide === "left" ? parts[0] : parts[1],
+      showBlank: true,
+      showTypeInput: true,
+      questionMode: "type",
+      kvkvkActivity: "bina",
+    };
   }
 
   function buildCabaranIsland2KvkvkMissingPartChoiceRound(word) {
@@ -5146,15 +5274,16 @@
       correctAnswer: w,
       showBlank: true,
       questionMode: "type",
+      kvkvkActivity: "teka",
     };
   }
 
   function buildCabaranIsland2KvkvkQuestionSequence(total) {
     const words = BELAJAR_CONTENT.perkataan_island2_kvkvk || [];
     const sebutWords = buildPracticeSequence(words.slice(), CABARAN_SHORT_EASY_COUNT);
-    const choiceWords = buildPracticeSequence(words.slice(), 2);
-    const suffixTypeWords = buildPracticeSequence(words.slice(), 2);
-    const fullTypeWords = buildPracticeSequence(words.slice(), 2);
+    const binaWords = buildPracticeSequence(words.slice(), CABARAN_ISLAND2_BINA_COUNT);
+    const tekaCount = Math.max(0, total - sebutWords.length - binaWords.length);
+    const tekaWords = buildPracticeSequence(words.slice(), tekaCount);
     const rounds = [];
 
     sebutWords.forEach(function (word) {
@@ -5165,23 +5294,15 @@
       });
     });
 
-    choiceWords.forEach(function (word) {
-      const round = buildCabaranIsland2KvkvkMissingPartChoiceRound(word);
+    binaWords.forEach(function (word) {
+      const round = buildCabaranIsland2KvkvkBinaRound(word);
 
       if (round) {
         rounds.push(round);
       }
     });
 
-    suffixTypeWords.forEach(function (word) {
-      const round = buildCabaranIsland2KvkvkMissingPartTypeRound(word);
-
-      if (round) {
-        rounds.push(round);
-      }
-    });
-
-    fullTypeWords.forEach(function (word) {
+    tekaWords.forEach(function (word) {
       const round = buildCabaranIsland2KvkvkFullWordTypeRound(word);
 
       if (round) {
@@ -5190,11 +5311,13 @@
     });
 
     while (rounds.length < total) {
-      rounds.push({
-        audioWord: String(words[0] || "kasut").trim().toLowerCase(),
-        audioFolder: "perkataan_island2_kvkvk",
-        questionMode: "sebut",
-      });
+      const round = buildCabaranIsland2KvkvkFullWordTypeRound(words[0] || "kasut");
+
+      if (!round) {
+        break;
+      }
+
+      rounds.push(round);
     }
 
     return rounds.slice(0, total);
@@ -5452,7 +5575,13 @@
 
     if (cabaranBlankSlotEl) {
       const isType = round && round.questionMode === "type";
-      cabaranBlankSlotEl.textContent = isType ? "?" : "";
+
+      if (isCabaranIsland2KvkvkPictureQuestion()) {
+        cabaranBlankSlotEl.textContent = "";
+        cabaranBlankSlotEl.style.display = "none";
+      } else {
+        cabaranBlankSlotEl.textContent = isType ? "?" : "";
+      }
     }
 
     cabaranBlankQuestionEl.style.display = "flex";
@@ -5482,6 +5611,10 @@
 
   function getCabaranQuestionInstruction() {
     const mode = getCabaranQuestionMode();
+
+    if (isCabaranIsland2KvkvkBinaQuestion()) {
+      return "Lengkapkan perkataan.";
+    }
 
     if (mode === "sebut") {
       return "Sebut perkataan ini dengan jelas.";
@@ -5681,8 +5814,62 @@
     });
   }
 
+  function applyCabaranIsland2BinaLayout() {
+    if (!isCabaranIsland2KvkvkBinaQuestion()) {
+      hideCabaranKvkvkSyllableCard();
+      return;
+    }
+
+    const B = CABARAN_ISLAND2_BINA_LAYOUT;
+
+    if (cabaranBlankQuestionEl && B.picture) {
+      applyCabaranOverlayRect(cabaranBlankQuestionEl, B.picture);
+      cabaranBlankQuestionEl.style.pointerEvents = "none";
+    }
+
+    if (cabaranQuestionEl && B.instruction) {
+      applyCabaranOverlayRect(cabaranQuestionEl, B.instruction);
+    }
+
+    if (cabaranKvkvkSyllableCardEl && B.syllableCard) {
+      applyCabaranOverlayRect(cabaranKvkvkSyllableCardEl, B.syllableCard);
+      cabaranKvkvkSyllableCardEl.style.pointerEvents = "none";
+      cabaranKvkvkSyllableCardEl.style.zIndex = "10";
+    }
+
+    if (cabaranTypeInputWrapEl && B.typingInput) {
+      applyCabaranOverlayRect(cabaranTypeInputWrapEl, B.typingInput);
+      cabaranTypeInputWrapEl.style.zIndex = "30";
+
+      if (B.typingInput.fontSize != null && cabaranTypeInputEl) {
+        cabaranTypeInputEl.style.fontSize =
+          "clamp(0.9rem, " + B.typingInput.fontSize + "vmin, 2.2rem)";
+      }
+    }
+
+    if (cabaranTypeSubmitBtn && B.typingSubmit) {
+      applyCabaranOverlayRect(cabaranTypeSubmitBtn, B.typingSubmit);
+      cabaranTypeSubmitBtn.style.position = "absolute";
+      cabaranTypeSubmitBtn.style.boxSizing = "border-box";
+      cabaranTypeSubmitBtn.style.zIndex = "31";
+    }
+
+    if (cabaranFeedback && B.feedbackText) {
+      applyCabaranOverlayRect(cabaranFeedback, B.feedbackText);
+      applyCabaranFeedbackFontSize();
+    }
+
+    if (cabaranTypeLabelEl) {
+      cabaranTypeLabelEl.style.display = "none";
+    }
+
+    updateCabaranKvkvkSyllableCard(cabaranKvkvkSyllableRevealed === true);
+  }
+
   function bindCabaranTypingSubmitLayout() {
-    const rect = CABARAN_OVERLAY_LAYOUT.typingSubmit;
+    const rect = isCabaranIsland2KvkvkBinaQuestion()
+      ? CABARAN_ISLAND2_BINA_LAYOUT.typingSubmit
+      : CABARAN_OVERLAY_LAYOUT.typingSubmit;
 
     if (!cabaranTypeSubmitBtn || !rect || getCabaranQuestionMode() !== "type") {
       return;
@@ -6152,6 +6339,7 @@
 
   function scheduleCabaranAdvance() {
     clearCabaranAdvanceTimer();
+    maybeRevealCabaranIsland2WordLabel();
     cabaranAdvanceTimer = window.setTimeout(function () {
       cabaranAdvanceTimer = null;
       openNextCabaranQuestion();
@@ -6200,6 +6388,36 @@
         cabaranFeedback.style.animation = "";
         cabaranFeedback.classList.add("cabaran-feedback--wrong");
       }
+    }
+  }
+
+  function showCabaranIsland2TekaWordFeedback(word, withStar) {
+    hideCabaranWordLabel();
+
+    const text = String(word || "").trim().toLowerCase();
+    const message = withStar ? text + " \u2B50" : text;
+
+    showCabaranFeedbackMessage(message);
+
+    if (!cabaranFeedback) {
+      return;
+    }
+
+    cabaranFeedback.style.whiteSpace = "nowrap";
+    cabaranFeedback.style.textAlign = "center";
+    cabaranFeedback.style.justifyContent = "center";
+    cabaranFeedback.style.alignItems = "center";
+    cabaranFeedback.style.fontSize = "clamp(1.8rem, 7.2vmin, 3.2rem)";
+    cabaranFeedback.classList.remove("cabaran-feedback--wrong");
+
+    if (isCabaranIsland2KvkvkTekaQuestion() && CABARAN_ISLAND2_TEKA_ANSWER_FEEDBACK) {
+      applyCabaranOverlayRect(cabaranFeedback, CABARAN_ISLAND2_TEKA_ANSWER_FEEDBACK);
+    }
+
+    if (withStar) {
+      void cabaranFeedback.offsetWidth;
+      cabaranFeedback.style.animation = "";
+      cabaranFeedback.classList.add("cabaran-feedback--correct");
     }
   }
 
@@ -6500,7 +6718,10 @@
     }
 
     if (cabaranBlankSlotEl) {
-      if (isType || showBlank) {
+      if (isCabaranIsland2KvkvkPictureQuestion()) {
+        cabaranBlankSlotEl.style.display = "none";
+        cabaranBlankSlotEl.textContent = "";
+      } else if (isType || showBlank) {
         cabaranBlankSlotEl.style.display = "inline-flex";
         cabaranBlankSlotEl.textContent = isType ? "?" : "";
       } else {
@@ -6508,6 +6729,8 @@
         cabaranBlankSlotEl.textContent = "";
       }
     }
+
+    syncCabaranIsland2PictureClue();
 
     syncCabaranTypingDebugCalibration();
 
@@ -6769,11 +6992,121 @@
       return;
     }
 
-    clearCabaranCountdownTimer();
-    cabaranQuestionLocked = true;
     const expected = String(round.correctAnswer || "").trim().toLowerCase();
     const isCorrect = typed === expected;
     const targetText = getCabaranTargetItem();
+
+    if (isCabaranIsland2KvkvkBinaQuestion()) {
+      cabaranKvkvkBinaAttempts += 1;
+
+      if (!isCorrect && cabaranKvkvkBinaAttempts < 2) {
+        clearCabaranCountdownTimer();
+        updateCabaranKvkvkSyllableCard(false);
+        hideCabaranWordLabel();
+        showCabaranFeedbackMessage(CABARAN_WRONG_FEEDBACK);
+        cabaranTypeInputEl.value = "";
+        cabaranTypeInputEl.disabled = false;
+        cabaranTypeInputEl.readOnly = false;
+        stopCabaranTypingInputAttention();
+        stopCabaranTypingSubmitAttention();
+
+        if (cabaranTypeSubmitBtn) {
+          cabaranTypeSubmitBtn.disabled = false;
+        }
+
+        startCabaranTypingInputAttention();
+        startCabaranTypingSubmitAttention();
+        focusCabaranTypeInputIfSafe();
+        return;
+      }
+
+      clearCabaranCountdownTimer();
+      cabaranQuestionLocked = true;
+      cabaranKvkvkSyllableRevealed = true;
+      updateCabaranKvkvkSyllableCard(true);
+      hideCabaranWordLabel();
+
+      if (isCorrect) {
+        cabaranCorrectCount += 1;
+        showCabaranIsland2TekaWordFeedback(targetText, true);
+      } else {
+        showCabaranIsland2TekaWordFeedback(targetText, false);
+      }
+
+      cabaranTypeInputEl.disabled = true;
+      stopCabaranTypingInputAttention();
+      stopCabaranTypingSubmitAttention();
+
+      if (cabaranTypeSubmitBtn) {
+        cabaranTypeSubmitBtn.disabled = true;
+      }
+
+      rememberCabaranAnswer({
+        targetText: targetText,
+        answer: typed,
+        transcript: "",
+        confidence: "",
+        isCorrect: isCorrect,
+      });
+      scheduleCabaranAdvance();
+      return;
+    }
+
+    if (isCabaranIsland2KvkvkTekaQuestion()) {
+      cabaranKvkvkTekaAttempts += 1;
+      hideCabaranWordLabel();
+
+      if (!isCorrect && cabaranKvkvkTekaAttempts < 2) {
+        clearCabaranCountdownTimer();
+        showCabaranFeedbackMessage(CABARAN_WRONG_FEEDBACK);
+        cabaranTypeInputEl.value = "";
+        cabaranTypeInputEl.disabled = false;
+        cabaranTypeInputEl.readOnly = false;
+        stopCabaranTypingInputAttention();
+        stopCabaranTypingSubmitAttention();
+
+        if (cabaranTypeSubmitBtn) {
+          cabaranTypeSubmitBtn.disabled = false;
+        }
+
+        startCabaranTypingInputAttention();
+        startCabaranTypingSubmitAttention();
+        focusCabaranTypeInputIfSafe();
+        return;
+      }
+
+      clearCabaranCountdownTimer();
+      cabaranQuestionLocked = true;
+      hideCabaranWordLabel();
+
+      if (isCorrect) {
+        cabaranCorrectCount += 1;
+        showCabaranIsland2TekaWordFeedback(targetText, true);
+      } else {
+        showCabaranIsland2TekaWordFeedback(targetText, false);
+      }
+
+      cabaranTypeInputEl.disabled = true;
+      stopCabaranTypingInputAttention();
+      stopCabaranTypingSubmitAttention();
+
+      if (cabaranTypeSubmitBtn) {
+        cabaranTypeSubmitBtn.disabled = true;
+      }
+
+      rememberCabaranAnswer({
+        targetText: targetText,
+        answer: typed,
+        transcript: "",
+        confidence: "",
+        isCorrect: isCorrect,
+      });
+      scheduleCabaranAdvance();
+      return;
+    }
+
+    clearCabaranCountdownTimer();
+    cabaranQuestionLocked = true;
 
     if (isCorrect) {
       cabaranCorrectCount += 1;
@@ -6809,6 +7142,9 @@
 
     cabaranQuestionLocked = false;
     resetCabaranTypingUiAnimations();
+    cabaranKvkvkSyllableRevealed = false;
+    cabaranKvkvkBinaAttempts = 0;
+    cabaranKvkvkTekaAttempts = 0;
 
     if (cabaranQuestionEl) {
       cabaranQuestionEl.textContent = getCabaranQuestionInstruction();
@@ -6936,6 +7272,8 @@
     clearCabaranCountdownTimer();
     clearCabaranFeedback();
     cabaranSusunPointerDrag = null;
+    hideCabaranWordLabel();
+    updateCabaranWordImage(getCabaranTargetItem());
 
     const mode = getCabaranQuestionMode();
 
@@ -7388,6 +7726,39 @@
     section.appendChild(cabaranTypeInputWrapEl);
     section.appendChild(cabaranTypeSubmitBtn);
     section.appendChild(cabaranTargetEl);
+
+    cabaranWordLabel = document.createElement("p");
+    cabaranWordLabel.id = "cabaran-word-label";
+    cabaranWordLabel.setAttribute("aria-live", "polite");
+    cabaranWordLabel.setAttribute("aria-hidden", "true");
+    cabaranWordLabel.style.cssText = CABARAN_WORD_LABEL_STYLE;
+    cabaranWordLabel.style.pointerEvents = "none";
+    cabaranWordLabel.style.visibility = "hidden";
+    cabaranBlankQuestionEl.appendChild(cabaranWordLabel);
+
+    cabaranWordImage = document.createElement("img");
+    cabaranWordImage.id = "cabaran-word-image";
+    cabaranWordImage.alt = "";
+    cabaranWordImage.decoding = "async";
+    cabaranWordImage.draggable = false;
+    cabaranWordImage.style.cssText = CABARAN_WORD_IMAGE_STYLE;
+    cabaranWordImage.style.pointerEvents = "none";
+    cabaranWordImage.addEventListener("error", function () {
+      hideCabaranWordImage();
+    });
+    cabaranBlankQuestionEl.appendChild(cabaranWordImage);
+
+    cabaranKvkvkSyllableCardEl = document.createElement("div");
+    cabaranKvkvkSyllableCardEl.id = "cabaran-kvkvk-syllable-card";
+    cabaranKvkvkSyllableCardEl.setAttribute("aria-hidden", "true");
+    cabaranKvkvkSyllableLeftEl = document.createElement("span");
+    cabaranKvkvkSyllableLeftEl.className = "cabaran-kvkvk-syllable-half";
+    cabaranKvkvkSyllableRightEl = document.createElement("span");
+    cabaranKvkvkSyllableRightEl.className = "cabaran-kvkvk-syllable-half";
+    cabaranKvkvkSyllableCardEl.appendChild(cabaranKvkvkSyllableLeftEl);
+    cabaranKvkvkSyllableCardEl.appendChild(cabaranKvkvkSyllableRightEl);
+    section.appendChild(cabaranKvkvkSyllableCardEl);
+
     section.appendChild(cabaranSusunAnswerEl);
     section.appendChild(cabaranSusunDragEl);
     section.appendChild(zone);
@@ -7694,6 +8065,7 @@
       clearCabaranAdvanceTimer();
       stopCabaranRecognition();
       hideCabaranSummaryOverlay();
+      hideCabaranWordVisuals();
       cabaranBusy = false;
     }
 
@@ -12385,6 +12757,208 @@
     }
 
     showBelajarWordImage(src, String(word || "").trim().toLowerCase());
+  }
+
+  function hideCabaranWordLabel() {
+    if (!cabaranWordLabel) {
+      return;
+    }
+
+    cabaranWordLabel.textContent = "";
+    cabaranWordLabel.style.display = "none";
+    cabaranWordLabel.style.visibility = "hidden";
+    cabaranWordLabel.setAttribute("aria-hidden", "true");
+  }
+
+  function showCabaranWordLabel(word) {
+    if (!cabaranWordLabel || selectedCheckpoint !== "perkataan_island2_kvkvk") {
+      return;
+    }
+
+    const text = String(word || "").trim();
+
+    if (!text) {
+      hideCabaranWordLabel();
+      return;
+    }
+
+    cabaranWordLabel.textContent = text;
+    cabaranWordLabel.style.visibility = "visible";
+    cabaranWordLabel.style.display = "flex";
+    cabaranWordLabel.style.pointerEvents = "none";
+    cabaranWordLabel.setAttribute("aria-hidden", "false");
+  }
+
+  function maybeRevealCabaranIsland2WordLabel() {
+    if (selectedCheckpoint !== "perkataan_island2_kvkvk") {
+      return;
+    }
+
+    if (isCabaranIsland2KvkvkSebutQuestion()) {
+      hideCabaranWordLabel();
+      hideCabaranKvkvkSyllableCard();
+      return;
+    }
+
+    if (isCabaranIsland2KvkvkTekaQuestion()) {
+      hideCabaranWordLabel();
+      return;
+    }
+
+    if (isCabaranIsland2KvkvkBinaQuestion()) {
+      hideCabaranWordLabel();
+      return;
+    }
+
+    showCabaranWordLabel(getCabaranTargetItem());
+  }
+
+  function hideCabaranWordImage() {
+    setWordImageElement(cabaranWordImage, null, "");
+  }
+
+  function hideCabaranWordVisuals() {
+    hideCabaranWordLabel();
+    hideCabaranWordImage();
+    hideCabaranKvkvkSyllableCard();
+  }
+
+  function hideCabaranKvkvkSyllableCard() {
+    if (!cabaranKvkvkSyllableCardEl) {
+      return;
+    }
+
+    cabaranKvkvkSyllableRevealed = false;
+    cabaranKvkvkSyllableCardEl.classList.remove("is-complete");
+    cabaranKvkvkSyllableCardEl.style.display = "none";
+    cabaranKvkvkSyllableCardEl.setAttribute("aria-hidden", "true");
+
+    if (cabaranKvkvkSyllableLeftEl) {
+      cabaranKvkvkSyllableLeftEl.textContent = "";
+      cabaranKvkvkSyllableLeftEl.classList.remove("is-missing", "is-given");
+    }
+
+    if (cabaranKvkvkSyllableRightEl) {
+      cabaranKvkvkSyllableRightEl.textContent = "";
+      cabaranKvkvkSyllableRightEl.classList.remove("is-missing", "is-given");
+    }
+  }
+
+  function updateCabaranKvkvkSyllableCard(revealed) {
+    if (
+      !cabaranKvkvkSyllableCardEl ||
+      !cabaranKvkvkSyllableLeftEl ||
+      !cabaranKvkvkSyllableRightEl ||
+      !isCabaranIsland2KvkvkBinaQuestion()
+    ) {
+      hideCabaranKvkvkSyllableCard();
+      return;
+    }
+
+    const round = getCabaranCurrentRound();
+    const left = String(round.leftSyllable || "").trim().toLowerCase();
+    const right = String(round.rightSyllable || "").trim().toLowerCase();
+    const missingSide = round.missingSide === "left" ? "left" : "right";
+    const showMissing = revealed === true;
+    const showLeft = missingSide !== "left" || showMissing;
+    const showRight = missingSide !== "right" || showMissing;
+
+    cabaranKvkvkSyllableLeftEl.textContent = showLeft ? left : "?";
+    cabaranKvkvkSyllableRightEl.textContent = showRight ? right : "?";
+    cabaranKvkvkSyllableLeftEl.classList.toggle("is-missing", !showLeft);
+    cabaranKvkvkSyllableLeftEl.classList.toggle("is-given", showLeft);
+    cabaranKvkvkSyllableRightEl.classList.toggle("is-missing", !showRight);
+    cabaranKvkvkSyllableRightEl.classList.toggle("is-given", showRight);
+    cabaranKvkvkSyllableCardEl.classList.toggle("is-complete", showMissing);
+    cabaranKvkvkSyllableCardEl.style.display = "flex";
+    cabaranKvkvkSyllableCardEl.setAttribute("aria-hidden", "false");
+  }
+
+  function syncCabaranIsland2PictureClue() {
+    const isPictureClue = isCabaranIsland2KvkvkPictureQuestion();
+
+    if (cabaranBlankQuestionEl) {
+      cabaranBlankQuestionEl.classList.toggle("is-kvkvk-picture-clue", isPictureClue);
+    }
+
+    if (cabaranBlankPrefixEl) {
+      cabaranBlankPrefixEl.style.display = isPictureClue ? "none" : "";
+    }
+
+    if (cabaranBlankSuffixEl) {
+      cabaranBlankSuffixEl.style.display = isPictureClue ? "none" : "";
+    }
+
+    if (!isPictureClue) {
+      hideCabaranWordImage();
+      hideCabaranWordLabel();
+      return;
+    }
+
+    if (cabaranBlankSlotEl) {
+      cabaranBlankSlotEl.textContent = "";
+      cabaranBlankSlotEl.style.display = "none";
+    }
+
+    if (cabaranWordImage) {
+      cabaranWordImage.style.position = "absolute";
+      cabaranWordImage.style.left = "0";
+      cabaranWordImage.style.top = "0";
+      cabaranWordImage.style.width = "100%";
+      cabaranWordImage.style.height = "100%";
+      cabaranWordImage.style.objectFit = "contain";
+      cabaranWordImage.style.objectPosition = "center";
+      cabaranWordImage.style.pointerEvents = "none";
+      cabaranWordImage.style.zIndex = "8";
+
+      if (cabaranBlankQuestionEl && cabaranWordImage.parentNode !== cabaranBlankQuestionEl) {
+        cabaranBlankQuestionEl.appendChild(cabaranWordImage);
+      }
+    }
+
+    if (cabaranWordLabel) {
+      cabaranWordLabel.style.position = "absolute";
+      cabaranWordLabel.style.left = "0";
+      cabaranWordLabel.style.right = "0";
+      cabaranWordLabel.style.top = "auto";
+      cabaranWordLabel.style.bottom = "0";
+      cabaranWordLabel.style.width = "auto";
+      cabaranWordLabel.style.height = "auto";
+      cabaranWordLabel.style.transform = "none";
+      cabaranWordLabel.style.pointerEvents = "none";
+      cabaranWordLabel.style.zIndex = "9";
+
+      if (cabaranBlankQuestionEl && cabaranWordLabel.parentNode !== cabaranBlankQuestionEl) {
+        cabaranBlankQuestionEl.appendChild(cabaranWordLabel);
+      }
+    }
+  }
+
+  function updateCabaranWordImage(word) {
+    if (selectedCheckpoint !== "perkataan_island2_kvkvk") {
+      hideCabaranWordVisuals();
+      syncCabaranIsland2PictureClue();
+      return;
+    }
+
+    if (isCabaranIsland2KvkvkSebutQuestion()) {
+      hideCabaranWordVisuals();
+      syncCabaranIsland2PictureClue();
+      return;
+    }
+
+    syncCabaranIsland2PictureClue();
+
+    const key = String(word || "").trim().toLowerCase();
+    const src = getIsland2KvkvkImageSrc(key);
+
+    if (!src) {
+      hideCabaranWordImage();
+      return;
+    }
+
+    hideCabaranWordLabel();
+    setWordImageElement(cabaranWordImage, src, "");
   }
 
   function hideLatihanChoiceWordLabel() {
