@@ -781,6 +781,9 @@
   const stage = document.getElementById("stage");
   let activeScreen = "home";
   let transitionTimer = null;
+  let navTransitionToken = 0;
+  let navTransitionBusy = false;
+  let navTransitionTimer = null;
   let selectedCheckpoint = "vokal";
   let belajarItemIndex = 0;
   let belajarLevelIndex = 0;
@@ -3517,6 +3520,17 @@
 
       if (name === "home") {
         section.style.webkitTouchCallout = "none";
+
+        const mulaArt = document.createElement("img");
+        mulaArt.className = "home-mula-art";
+        mulaArt.src = "assets/mula.png";
+        mulaArt.alt = "";
+        mulaArt.width = 1080;
+        mulaArt.height = 1920;
+        mulaArt.decoding = "async";
+        mulaArt.draggable = false;
+        mulaArt.setAttribute("aria-hidden", "true");
+        section.appendChild(mulaArt);
       }
 
       if (name === "login") {
@@ -7970,6 +7984,146 @@
     startCabaran();
   }
 
+  const NAV_TRANSITION_CLASSES = [
+    "is-nav-leaving",
+    "is-nav-leave-zoom-fade",
+    "is-nav-leave-zoom-out",
+    "is-nav-leave-slide-left",
+    "is-nav-leave-slide-right",
+    "is-nav-enter-zoom-bounce",
+    "is-nav-enter-zoom-in-gentle",
+    "is-nav-enter-slide-from-right",
+    "is-nav-enter-slide-from-left",
+  ];
+
+  function prefersReducedMotion() {
+    return (
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    );
+  }
+
+  function clearNavTransitionTimer() {
+    if (navTransitionTimer !== null) {
+      window.clearTimeout(navTransitionTimer);
+      navTransitionTimer = null;
+    }
+  }
+
+  function stripNavTransitionClasses(el) {
+    NAV_TRANSITION_CLASSES.forEach(function (className) {
+      el.classList.remove(className);
+    });
+    el.style.removeProperty("--kmj-nav-ms");
+  }
+
+  function cancelNavTransitions() {
+    navTransitionToken += 1;
+    navTransitionBusy = false;
+    clearNavTransitionTimer();
+    document.querySelectorAll(".screen").forEach(stripNavTransitionClasses);
+  }
+
+  function getNavTransition(from, to) {
+    if (!from || !to || from === to) {
+      return null;
+    }
+
+    if (from === "home" && to === "login") {
+      return { leave: "zoom-fade", enter: "zoom-bounce", leaveMs: 250, enterMs: 550 };
+    }
+
+    if (from === "login" && to === "home") {
+      return { leave: "zoom-fade", enter: "zoom-bounce", leaveMs: 250, enterMs: 550 };
+    }
+
+    if (from === "login" && to === "map") {
+      return {
+        leave: "slide-left",
+        enter: "slide-from-right",
+        leaveMs: 500,
+        enterMs: 500,
+      };
+    }
+
+    if (from === "map" && to === "login") {
+      return {
+        leave: "slide-right",
+        enter: "slide-from-left",
+        leaveMs: 500,
+        enterMs: 500,
+      };
+    }
+
+    if (from === "map" && (to === "island1" || to === "island2")) {
+      return { leave: "zoom-out", enter: "zoom-bounce", leaveMs: 600, enterMs: 600 };
+    }
+
+    if ((from === "island1" || from === "island2") && to === "map") {
+      return {
+        leave: "slide-right",
+        enter: "slide-from-left",
+        leaveMs: 450,
+        enterMs: 450,
+      };
+    }
+
+    if (from === "map" && to === "home") {
+      return {
+        leave: "slide-right",
+        enter: "slide-from-left",
+        leaveMs: 500,
+        enterMs: 500,
+      };
+    }
+
+    if (from === "transition" && to === "belajar") {
+      return { leave: null, enter: "zoom-in-gentle", leaveMs: 0, enterMs: 500 };
+    }
+
+    return null;
+  }
+
+  function startNavTransition(previousScreen, nextScreen) {
+    if (prefersReducedMotion() || pronunciationRecordingBusy) {
+      return;
+    }
+
+    const spec = getNavTransition(previousScreen, nextScreen);
+    if (!spec) {
+      return;
+    }
+
+    const prevEl = document.getElementById("screen-" + previousScreen);
+    const nextEl = document.getElementById("screen-" + nextScreen);
+    if (!nextEl) {
+      return;
+    }
+
+    const token = navTransitionToken;
+    navTransitionBusy = true;
+
+    if (spec.leave && prevEl && previousScreen !== nextScreen) {
+      prevEl.style.setProperty("--kmj-nav-ms", spec.leaveMs + "ms");
+      prevEl.classList.add("is-nav-leaving", "is-nav-leave-" + spec.leave);
+    }
+
+    if (spec.enter) {
+      nextEl.style.setProperty("--kmj-nav-ms", spec.enterMs + "ms");
+      nextEl.classList.add("is-nav-enter-" + spec.enter);
+    }
+
+    navTransitionTimer = window.setTimeout(function () {
+      navTransitionTimer = null;
+      if (token !== navTransitionToken) {
+        return;
+      }
+
+      navTransitionBusy = false;
+      document.querySelectorAll(".screen").forEach(stripNavTransitionClasses);
+    }, Math.max(spec.leaveMs || 0, spec.enterMs || 0));
+  }
+
   function showScreen(name) {
     if (!SCREENS[name]) {
       return;
@@ -7981,6 +8135,7 @@
       return;
     }
 
+    cancelNavTransitions();
     clearTransitionTimer();
 
     document.querySelectorAll(".screen").forEach(function (el) {
@@ -7990,6 +8145,7 @@
     });
 
     activeScreen = name;
+    startNavTransition(previousScreen, name);
 
     if (name === "tulis") {
       tulisPreviousScreen = previousScreen || "belajar";
@@ -8059,6 +8215,10 @@
       hideBelajarWordAiFallbackOverlay();
       belajarWordGoogleApiFailStreak = 0;
       pronunciationRecordingBusy = false;
+    }
+
+    if (name === "tulis") {
+      playBelajarAudio();
     }
 
     if (name !== "cabaran") {
@@ -13232,9 +13392,22 @@
       return;
     }
 
-    event.preventDefault();
-
     const action = btn.dataset.action;
+
+    if (navTransitionBusy) {
+      const isNavAction =
+        action === "go" ||
+        action === "student-login" ||
+        action === "transition" ||
+        action === "belajar-back";
+
+      if (isNavAction) {
+        event.preventDefault();
+        return;
+      }
+    }
+
+    event.preventDefault();
 
     if (action === "student-login" && btn.dataset.target) {
       if (applyStudentLogin()) {
@@ -13293,6 +13466,7 @@
 
     if (action === "tulis-replay-demo") {
       runTulisDemoAnimation();
+      playBelajarAudio();
       return;
     }
 
