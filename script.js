@@ -177,7 +177,49 @@
           width: 44,
           height: 9,
           action: "go",
-          target: "login",
+          target: "role",
+        },
+      ],
+    },
+    role: {
+      image: "assets/role-bg.png",
+      hotspots: [
+        {
+          id: "role-home",
+          label: "Laman utama",
+          left: 3.8,
+          top: 1,
+          width: 14.2,
+          height: 8,
+          action: "go",
+          target: "home",
+        },
+        {
+          id: "role-murid",
+          label: "Murid",
+          left: 7.2,
+          top: 32.4,
+          width: 85.9,
+          height: 16.9,
+          action: "role-murid",
+        },
+        {
+          id: "role-guru",
+          label: "Guru",
+          left: 6.7,
+          top: 49.1,
+          width: 87,
+          height: 18.2,
+          action: "role-guru",
+        },
+        {
+          id: "role-parent",
+          label: "Ibu Bapa / Penjaga",
+          left: 6.9,
+          top: 67.9,
+          width: 86.9,
+          height: 17,
+          action: "role-parent",
         },
       ],
     },
@@ -192,7 +234,7 @@
           width: 11,
           height: 6,
           action: "go",
-          target: "home",
+          target: "role",
         },
         {
           id: "close",
@@ -932,6 +974,8 @@
   let teacherBlobUrls = [];
   let homeLongPressTimer = null;
   let homeLongPressPointerId = null;
+  let roleReadyTimer = null;
+  let rolePressTimer = null;
   let loginClassSelect = null;
   let loginNameSelect = null;
   let loginRosterStatusEl = null;
@@ -3540,6 +3584,29 @@
         mulaArt.draggable = false;
         mulaArt.setAttribute("aria-hidden", "true");
         section.appendChild(mulaArt);
+      }
+
+      if (name === "role") {
+        img.classList.add("role-bg");
+        [
+          ["role-art-logo", "assets/role-logo.png", "role-logo"],
+          ["role-art-title", "assets/role-title.png", "role-title"],
+          ["role-art-murid", "assets/role-murid.png", "role-murid"],
+          ["role-art-guru", "assets/role-guru.png", "role-guru"],
+          ["role-art-parent", "assets/role-parent.png", "role-parent"],
+        ].forEach(function (layer) {
+          const art = document.createElement("img");
+          art.className = "role-art " + layer[0];
+          art.src = layer[1];
+          art.alt = "";
+          art.width = 1080;
+          art.height = 1920;
+          art.decoding = "async";
+          art.draggable = false;
+          art.dataset.roleArt = layer[2];
+          art.setAttribute("aria-hidden", "true");
+          section.appendChild(art);
+        });
       }
 
       if (name === "login") {
@@ -8053,6 +8120,62 @@
     document.querySelectorAll(".screen").forEach(stripNavTransitionClasses);
   }
 
+  function clearRoleEntrance() {
+    if (roleReadyTimer !== null) {
+      window.clearTimeout(roleReadyTimer);
+      roleReadyTimer = null;
+    }
+
+    const role = document.getElementById("screen-role");
+    if (role) {
+      role.classList.remove("is-role-ready");
+    }
+  }
+
+  function armRoleEntrance() {
+    clearRoleEntrance();
+
+    const role = document.getElementById("screen-role");
+    if (!role) {
+      return;
+    }
+
+    if (prefersReducedMotion()) {
+      role.classList.add("is-role-ready");
+      return;
+    }
+
+    roleReadyTimer = window.setTimeout(function () {
+      roleReadyTimer = null;
+      role.classList.add("is-role-ready");
+    }, 1000);
+  }
+
+  function playRoleButtonPress(hotspotId, done) {
+    if (rolePressTimer !== null) {
+      return;
+    }
+
+    const art = document.querySelector(
+      '#screen-role [data-role-art="' + hotspotId + '"]'
+    );
+
+    if (prefersReducedMotion() || !art) {
+      done();
+      return;
+    }
+
+    art.classList.remove("is-role-press");
+    void art.offsetWidth;
+    art.classList.add("is-role-press");
+
+    rolePressTimer = window.setTimeout(function () {
+      rolePressTimer = null;
+      art.classList.remove("is-role-press");
+      done();
+    }, 220);
+  }
+
   function getNavTransition(from, to) {
     if (!from || !to || from === to) {
       return null;
@@ -8060,6 +8183,32 @@
 
     if (from === "home" && to === "login") {
       return { leave: "zoom-fade", enter: "zoom-bounce", leaveMs: 250, enterMs: 550 };
+    }
+
+    if (from === "home" && to === "role") {
+      return { leave: "zoom-fade", enter: "zoom-bounce", leaveMs: 250, enterMs: 550 };
+    }
+
+    if (from === "role" && to === "home") {
+      return { leave: "zoom-fade", enter: "zoom-bounce", leaveMs: 250, enterMs: 550 };
+    }
+
+    if (from === "role" && to === "login") {
+      return {
+        leave: "slide-left",
+        enter: "slide-from-right",
+        leaveMs: 500,
+        enterMs: 500,
+      };
+    }
+
+    if (from === "login" && to === "role") {
+      return {
+        leave: "slide-right",
+        enter: "slide-from-left",
+        leaveMs: 500,
+        enterMs: 500,
+      };
     }
 
     if (from === "login" && to === "home") {
@@ -8277,6 +8426,12 @@
 
     if (name === "login") {
       refreshLoginDropdowns();
+    }
+
+    if (name === "role") {
+      armRoleEntrance();
+    } else {
+      clearRoleEntrance();
     }
 
     updateCabaranLayoutDebugPanelVisibility();
@@ -13482,6 +13637,27 @@
       }
 
       showScreen(btn.dataset.target);
+      return;
+    }
+
+    if (action === "role-murid") {
+      playRoleButtonPress("role-murid", function () {
+        showScreen("login");
+      });
+      return;
+    }
+
+    if (action === "role-guru") {
+      playRoleButtonPress("role-guru", function () {
+        openTeacherPortalEntry();
+      });
+      return;
+    }
+
+    if (action === "role-parent") {
+      playRoleButtonPress("role-parent", function () {
+        window.alert("Mod Ibu Bapa / Penjaga akan datang.");
+      });
       return;
     }
 
