@@ -1481,6 +1481,65 @@
     return '"' + text.replace(/"/g, '""') + '"';
   }
 
+  function formatMalaysiaExportTimestamp(value) {
+    let text;
+    let parsed;
+    let shifted;
+    let day;
+    let month;
+    let year;
+    let hours;
+    let minutes;
+    let seconds;
+
+    if (value == null || value === "") {
+      return "";
+    }
+
+    text = String(value).trim();
+
+    if (!text) {
+      return "";
+    }
+
+    if (/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2}$/.test(text)) {
+      return text;
+    }
+
+    parsed = Date.parse(text);
+
+    if (Number.isNaN(parsed)) {
+      return "";
+    }
+
+    shifted = new Date(parsed + 8 * 60 * 60 * 1000);
+    day = shifted.getUTCDate();
+    month = shifted.getUTCMonth() + 1;
+    year = shifted.getUTCFullYear();
+    hours = shifted.getUTCHours();
+    minutes = shifted.getUTCMinutes();
+    seconds = shifted.getUTCSeconds();
+
+    return (
+      (day < 10 ? "0" : "") +
+      day +
+      "/" +
+      (month < 10 ? "0" : "") +
+      month +
+      "/" +
+      year +
+      " " +
+      (hours < 10 ? "0" : "") +
+      hours +
+      ":" +
+      (minutes < 10 ? "0" : "") +
+      minutes +
+      ":" +
+      (seconds < 10 ? "0" : "") +
+      seconds
+    );
+  }
+
   async function exportAllRecordsCsv() {
     await initDatabase();
     const all = getLatestAttemptRecords(await getAllRecordings());
@@ -1521,7 +1580,7 @@
         "," +
         escapeCsvCell(r.resultSource) +
         "," +
-        escapeCsvCell(r.timestamp) +
+        escapeCsvCell(formatMalaysiaExportTimestamp(r.timestamp)) +
         "," +
         escapeCsvCell(r.status) +
         "," +

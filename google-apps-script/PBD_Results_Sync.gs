@@ -1004,16 +1004,158 @@ function getOrCreateSheetInSpreadsheet_(spreadsheet, name) {
 
 function writeReportSheet_(spreadsheet, sheetName, headers, rows) {
   var sheet = getOrCreateSheetInSpreadsheet_(spreadsheet, sheetName);
+  var displayRows = formatReportTimestampColumns_(headers, rows);
 
   sheet.clear();
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
-  if (rows.length) {
-    sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  if (displayRows.length) {
+    applyReportTimestampTextFormat_(sheet, headers, displayRows.length);
+    sheet.getRange(2, 1, displayRows.length, headers.length).setValues(displayRows);
   }
 
   sheet.setFrozenRows(1);
   sheet.autoResizeColumns(1, headers.length);
+}
+
+function formatReportTimestampColumns_(headers, rows) {
+  var names = [
+    "updatedAt",
+    "syncedAt",
+    "timestamp",
+    "firstDate",
+    "latestDate",
+    "lastUpdated",
+  ];
+  var indexes = [];
+  var result = [];
+  var i;
+  var j;
+  var index;
+  var copy;
+
+  for (i = 0; i < names.length; i += 1) {
+    index = getHeaderIndex_(headers, names[i]);
+
+    if (index >= 0) {
+      indexes.push(index);
+    }
+  }
+
+  if (!indexes.length) {
+    return rows;
+  }
+
+  for (i = 0; i < rows.length; i += 1) {
+    copy = (rows[i] || []).slice();
+
+    for (j = 0; j < indexes.length; j += 1) {
+      copy[indexes[j]] = formatMalaysiaExportTimestamp_(copy[indexes[j]]);
+    }
+
+    result.push(copy);
+  }
+
+  return result;
+}
+
+function applyReportTimestampTextFormat_(sheet, headers, rowCount) {
+  var names = [
+    "updatedAt",
+    "syncedAt",
+    "timestamp",
+    "firstDate",
+    "latestDate",
+    "lastUpdated",
+  ];
+  var i;
+  var index;
+
+  for (i = 0; i < names.length; i += 1) {
+    index = getHeaderIndex_(headers, names[i]);
+
+    if (index >= 0) {
+      sheet.getRange(2, index + 1, rowCount, 1).setNumberFormat("@");
+    }
+  }
+}
+
+function formatMalaysiaExportTimestamp_(value) {
+  var text;
+  var parsed;
+  var shifted;
+  var day;
+  var month;
+  var year;
+  var hours;
+  var minutes;
+  var seconds;
+
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+
+  if (!(value instanceof Date)) {
+    text = String(value).trim();
+
+    if (!text) {
+      return "";
+    }
+
+    // Already shown as Malaysia wall time. Do not add another 8 hours.
+    if (/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2}$/.test(text)) {
+      return text;
+    }
+  }
+
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) {
+      return "";
+    }
+
+    parsed = value.getTime();
+  } else {
+    text = String(value).trim();
+
+    if (!text) {
+      return "";
+    }
+
+    parsed = Date.parse(text);
+
+    if (isNaN(parsed)) {
+      return "";
+    }
+  }
+
+  // Asia/Kuala_Lumpur is UTC+8 all year. Read UTC fields after the shift
+  // so midnight crossings do not depend on the script timezone.
+  shifted = new Date(parsed + 8 * 60 * 60 * 1000);
+  day = shifted.getUTCDate();
+  month = shifted.getUTCMonth() + 1;
+  year = shifted.getUTCFullYear();
+  hours = shifted.getUTCHours();
+  minutes = shifted.getUTCMinutes();
+  seconds = shifted.getUTCSeconds();
+
+  return (
+    (day < 10 ? "0" : "") +
+    day +
+    "/" +
+    (month < 10 ? "0" : "") +
+    month +
+    "/" +
+    year +
+    " " +
+    (hours < 10 ? "0" : "") +
+    hours +
+    ":" +
+    (minutes < 10 ? "0" : "") +
+    minutes +
+    ":" +
+    (seconds < 10 ? "0" : "") +
+    seconds
+  );
 }
 
 function writeDashboardSheet_(
@@ -1041,7 +1183,7 @@ function writeDashboardSheet_(
   var rows = [
     ["School name", schoolName || "-"],
     ["School code", schoolCode],
-    ["Last generated timestamp", generatedAt],
+    ["Last generated timestamp", formatMalaysiaExportTimestamp_(generatedAt)],
     ["Total PBD records", totalPbdRecords],
     ["Total Cabaran checkpoints", totalCabaranCheckpoints],
     ["Total Research records", totalResearchRecords],

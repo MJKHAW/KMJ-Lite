@@ -5,8 +5,8 @@
   const DEBUG_TULIS_HOTSPOTS = false;
   /** Set true to show red outline boxes for every Cabaran HTML overlay (adjust CABARAN_OVERLAY_LAYOUT). */
   const DEBUG_CABARAN_LAYOUT = false;
-  /** TEMP: set false after island2 hotspot calibration. Outlines island2 hotspots only. */
-  const DEBUG_ISLAND2_HOTSPOTS = true;
+  /** TEMP: set true only while calibrating island2 hotspots. */
+  const DEBUG_ISLAND2_HOTSPOTS = false;
   const LATIHAN_CALIBRATION_MODE = false;
   const LATIHAN_EASY_ADJUST_MODE = false;
 
@@ -445,8 +445,7 @@
           top: 75,
           width: 43,
           height: 10,
-          action: "alert",
-          message: "Akan datang",
+          action: "transition",
         },
       ],
     },
@@ -641,6 +640,7 @@
       "roti", "gigi", "kuda", "topi",
     ],
     perkataan_island2_kvkvk: ["kasut", "mulut", "rumah", "semut", "kapal"],
+    perkataan_kvkvkv: ["kelapa", "kereta", "perigi", "tomato", "kepala"],
   };
 
   const SUKU_KATA_KV_LEVELS = [
@@ -674,6 +674,7 @@
     perkataan_vkv: "6.6rem",
     perkataan_kvkv: "6.6rem",
     perkataan_island2_kvkvk: "6.2rem",
+    perkataan_kvkvkv: "6.2rem",
   };
 
   const BELAJAR_WRITING_ZONE_STYLE =
@@ -725,6 +726,14 @@
     mulut: true,
     rumah: true,
     semut: true,
+  };
+
+  const BELAJAR_KVKVKV_IMAGE_WORDS = {
+    kelapa: true,
+    kereta: true,
+    perigi: true,
+    tomato: true,
+    kepala: true,
   };
 
   const BELAJAR_LEVEL_FONT_SIZE = "1.1rem";
@@ -6224,18 +6233,29 @@
   }
 
   function formatCabaranSummaryBody(summary, syncLine) {
-    return (
-      "Betul: " +
-      summary.totalCorrect +
-      "/" +
-      summary.totalQuestions +
-      "\nPeratus: " +
-      summary.percentage +
-      "%\nCadangan:\n" +
-      summary.suggestedTP +
-      "\n\n" +
-      String(syncLine || "")
-    );
+    const correct = summary.totalCorrect;
+    const total = summary.totalQuestions;
+    const lines = [
+      correct +
+        " daripada " +
+        total +
+        " jawapan betul (" +
+        summary.percentage +
+        "%).",
+      "Cadangan TP untuk semakan guru: " + summary.suggestedTP,
+    ];
+
+    if (typeof summary.percentage === "number" && summary.percentage < 50) {
+      lines.push("Jom belajar dan cuba lagi!");
+    }
+
+    const sync = String(syncLine || "").trim();
+    if (sync) {
+      lines.push("");
+      lines.push(sync);
+    }
+
+    return lines.join("\n");
   }
 
   function showCabaranSummaryOverlay(summary, syncLine) {
@@ -6247,7 +6267,7 @@
     const body = cabaranSummaryOverlayEl.querySelector("#cabaran-summary-body");
 
     if (title) {
-      title.textContent = "Tahniah 🎉";
+      title.textContent = "Syabas kerana mencuba! 🌟";
     }
 
     if (body) {
@@ -7782,35 +7802,43 @@
     cabaranSummaryOverlayEl.id = "cabaran-summary-overlay";
     cabaranSummaryOverlayEl.setAttribute("aria-hidden", "true");
     cabaranSummaryOverlayEl.style.cssText =
-      "position:absolute;inset:0;z-index:120;display:none;flex-direction:column;" +
-      "align-items:center;justify-content:center;gap:1rem;padding:1.25em;" +
-      "background:rgba(255,252,245,0.94);pointer-events:auto;";
+      "position:absolute;inset:0;z-index:10100;display:none;flex-direction:column;" +
+      "align-items:center;justify-content:center;padding:1.1em;box-sizing:border-box;" +
+      "background:rgba(42,31,20,0.55);pointer-events:auto;";
+
+    const summaryPanel = document.createElement("div");
+    summaryPanel.id = "cabaran-summary-panel";
+    summaryPanel.style.cssText =
+      "display:flex;flex-direction:column;align-items:stretch;gap:0.85em;" +
+      "width:min(100%,20.5em);max-height:100%;overflow:auto;box-sizing:border-box;" +
+      "padding:1.15em 1em 1em;background:#fff8e8;border:2px solid #5c4a32;border-radius:16px;";
 
     const summaryTitle = document.createElement("p");
     summaryTitle.id = "cabaran-summary-title";
     summaryTitle.style.cssText =
       "margin:0;font-family:" +
       BELAJAR_FONT +
-      ";font-size:clamp(1.1rem,4.5vmin,1.6rem);font-weight:700;color:#2a1f14;text-align:center;";
+      ";font-size:clamp(1.15rem,4.6vmin,1.55rem);font-weight:700;color:#2a1f14;" +
+      "text-align:center;line-height:1.3;";
 
     const summaryBody = document.createElement("p");
     summaryBody.id = "cabaran-summary-body";
     summaryBody.style.cssText =
       "margin:0;font-family:" +
       BELAJAR_FONT +
-      ";font-size:clamp(0.95rem,3.8vmin,1.2rem);font-weight:700;color:#2a1f14;" +
-      "text-align:center;white-space:pre-line;line-height:1.4;";
+      ";font-size:clamp(0.95rem,3.6vmin,1.15rem);font-weight:700;color:#2a1f14;" +
+      "text-align:center;white-space:pre-line;line-height:1.45;";
 
     const summaryActions = document.createElement("div");
     summaryActions.style.cssText =
-      "display:flex;flex-wrap:wrap;justify-content:center;gap:0.75em;width:100%;max-width:22em;";
+      "display:flex;flex-direction:column;align-items:stretch;gap:0.65em;width:100%;";
 
     function makeSummaryBtn(label, onClick) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = label;
       btn.style.cssText =
-        "flex:1 1 9em;margin:0;padding:0.65em 1em;border:2px solid #5c4a32;" +
+        "margin:0;padding:0.7em 1em;border:2px solid #5c4a32;" +
         "border-radius:14px;background:linear-gradient(180deg,#fff8e8 0%,#ffe7b8 100%);" +
         "color:#2a1f14;cursor:pointer;font-family:" +
         BELAJAR_FONT +
@@ -7836,9 +7864,10 @@
       })
     );
 
-    cabaranSummaryOverlayEl.appendChild(summaryTitle);
-    cabaranSummaryOverlayEl.appendChild(summaryBody);
-    cabaranSummaryOverlayEl.appendChild(summaryActions);
+    summaryPanel.appendChild(summaryTitle);
+    summaryPanel.appendChild(summaryBody);
+    summaryPanel.appendChild(summaryActions);
+    cabaranSummaryOverlayEl.appendChild(summaryPanel);
     section.appendChild(cabaranSummaryOverlayEl);
 
     if (cabaranFeedback) {
@@ -9377,6 +9406,14 @@
         if (isIsland2Kvkvk) {
           hideLatihanChoiceWordLabel();
         }
+
+        if (activeScreen !== "latihan" || latihanChoiceAnsweredCorrectly) {
+          return;
+        }
+
+        showLatihanFeedbackMessage(buildLatihanChoiceHint(targetWord), {
+          autoHide: false,
+        });
       }, LATIHAN_FEEDBACK_HIDE_MS);
 
       return;
@@ -9408,9 +9445,7 @@
         }
       });
 
-      showLatihanFeedbackMessage(buildLatihanChoiceHint(targetWord), {
-        autoHide: false,
-      });
+      hideLatihanPersistentHint();
 
       // Allow Seterusnya (including final question) after answer is revealed.
       latihanChoiceAnsweredCorrectly = true;
@@ -12853,6 +12888,18 @@
     return "assets/images/perkataan/KVKVK/" + key + ".png";
   }
 
+  function getKvkvkvImageSrc(word) {
+    const key = String(word || "")
+      .trim()
+      .toLowerCase();
+
+    if (!key || !BELAJAR_KVKVKV_IMAGE_WORDS[key]) {
+      return null;
+    }
+
+    return "assets/images/perkataan/KVKVKV/" + key + ".png";
+  }
+
   function setWordImageElement(imgEl, src, word) {
     if (!imgEl) {
       return;
@@ -12904,19 +12951,31 @@
   }
 
   function updateBelajarWordImage(word) {
-    if (selectedCheckpoint !== "perkataan_island2_kvkvk") {
-      hideBelajarWordImage();
+    if (selectedCheckpoint === "perkataan_island2_kvkvk") {
+      const src = getIsland2KvkvkImageSrc(word);
+
+      if (!src) {
+        hideBelajarWordImage();
+        return;
+      }
+
+      showBelajarWordImage(src, String(word || "").trim().toLowerCase());
       return;
     }
 
-    const src = getIsland2KvkvkImageSrc(word);
+    if (selectedCheckpoint === "perkataan_kvkvkv") {
+      const src = getKvkvkvImageSrc(word);
 
-    if (!src) {
-      hideBelajarWordImage();
+      if (!src) {
+        hideBelajarWordImage();
+        return;
+      }
+
+      showBelajarWordImage(src, "");
       return;
     }
 
-    showBelajarWordImage(src, String(word || "").trim().toLowerCase());
+    hideBelajarWordImage();
   }
 
   function hideCabaranWordLabel() {
