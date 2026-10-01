@@ -996,6 +996,62 @@
     }
   }
 
+  async function syncLearningEventsToGoogleSheet(events) {
+    const schoolCode = getSchoolCode();
+    let response = null;
+    let responseText = "";
+    let result = null;
+
+    if (!isSyncEndpointConfigured()) {
+      return { ok: false, reason: "no_endpoint" };
+    }
+
+    if (isBrowserOffline()) {
+      return { ok: false, reason: "offline" };
+    }
+
+    if (!schoolCode) {
+      return { ok: false, reason: "no_school" };
+    }
+
+    if (!events || !events.length) {
+      return { ok: true, inserted: 0, duplicates: 0 };
+    }
+
+    try {
+      response = await fetch(KMJ_SYNC_ENDPOINT, {
+        method: "POST",
+        redirect: "follow",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8",
+        },
+        body: JSON.stringify({
+          action: "syncLearningEvents",
+          schoolCode: schoolCode,
+          events: events,
+        }),
+      });
+      responseText = await response.text();
+      result = responseText ? JSON.parse(responseText) : {};
+    } catch (error) {
+      return { ok: false, reason: error && error.message ? error.message : String(error) };
+    }
+
+    if (!response.ok || !result || result.success !== true) {
+      return {
+        ok: false,
+        reason: (result && result.error) || "sync_failed",
+      };
+    }
+
+    return {
+      ok: true,
+      inserted: result.inserted || 0,
+      duplicates: result.duplicates || 0,
+      rejected: result.rejected || 0,
+    };
+  }
+
   async function getCabaranResultsFromGoogleSheet() {
     if (!isSyncEndpointConfigured()) {
       throw new Error(
@@ -3853,6 +3909,7 @@
     getCabaranResultsFromGoogleSheet: getCabaranResultsFromGoogleSheet,
     cabaranSummaryToSyncPayload: cabaranSummaryToSyncPayload,
     syncCabaranSummariesToGoogleSheet: syncCabaranSummariesToGoogleSheet,
+    syncLearningEventsToGoogleSheet: syncLearningEventsToGoogleSheet,
     tryAutoSyncAfterAssessment: tryAutoSyncAfterAssessment,
     getStudentSyncStatusSummary: getStudentSyncStatusSummary,
     isGoogleSheetSyncInProgress: isGoogleSheetSyncInProgress,

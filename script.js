@@ -871,6 +871,9 @@
   let latihanChoiceQuestionNum = 1;
   let latihanChoiceResetTimer = null;
   let latihanChoiceWrongAttempts = 0;
+  let kvkvPilihHelpGiven = false;
+  let kvkvPilihEventQueue = [];
+  let kvkvPilihSyncing = false;
   let latihanChoiceAnsweredCorrectly = false;
   let latihanChoiceHintVisible = false;
   let latihanChoiceWordImage = null;
@@ -3781,6 +3784,7 @@
             if (spot.action === "latihan-back") {
               showScreen("belajar");
             } else if (spot.action === "latihan-replay-audio") {
+              markKvkvPilihHelpGiven();
               playLatihanChoiceAudio();
             } else if (spot.action === "latihan-next") {
               openNextLatihanChoiceQuestion();
@@ -9091,6 +9095,7 @@
 
     latihanChoiceWrongAttempts = 0;
     latihanChoiceAnsweredCorrectly = false;
+    kvkvPilihHelpGiven = false;
     hideLatihanPersistentHint();
 
     showLatihanFeedbackMessage(LATIHAN_GUIDANCE_LISTEN);
@@ -9456,6 +9461,139 @@
     runLatihanQuestionStartPedagogy();
   }
 
+  function createLearningEventId() {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+      return window.crypto.randomUUID();
+    }
+
+    const bytes = new Uint8Array(16);
+    let i;
+
+    if (window.crypto && typeof window.crypto.getRandomValues === "function") {
+      window.crypto.getRandomValues(bytes);
+    } else {
+      for (i = 0; i < 16; i += 1) {
+        bytes[i] = Math.floor(Math.random() * 256);
+      }
+    }
+
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+
+    function hex(start, end) {
+      let text = "";
+
+      for (i = start; i < end; i += 1) {
+        text += (bytes[i] + 256).toString(16).slice(1);
+      }
+
+      return text;
+    }
+
+    return (
+      hex(0, 4) +
+      "-" +
+      hex(4, 6) +
+      "-" +
+      hex(6, 8) +
+      "-" +
+      hex(8, 10) +
+      "-" +
+      hex(10, 16)
+    );
+  }
+
+  function markKvkvPilihHelpGiven() {
+    if (selectedCheckpoint === "perkataan_kvkv") {
+      kvkvPilihHelpGiven = true;
+    }
+  }
+
+  function recordKvkvPilihLearningEvent(targetWord, isCorrect) {
+    const engine = getAssessmentEngine();
+    const session = engine && engine.getLoggedInStudent ? engine.getLoggedInStudent() : null;
+    const schoolCode =
+      engine && engine.getSchoolCode ? String(engine.getSchoolCode() || "").trim() : "";
+    const word = String(targetWord || "").trim().toLowerCase();
+
+    if (selectedCheckpoint !== "perkataan_kvkv" || activeScreen !== "latihan") {
+      return;
+    }
+
+    if (!session || !schoolCode || !word) {
+      console.warn("[KMJ] Learning event skipped: missing student, school, or word");
+      return;
+    }
+
+    kvkvPilihEventQueue.push({
+      eventId: createLearningEventId(),
+      schoolCode: schoolCode,
+      classId: session.classId,
+      studentId: session.studentId,
+      studentName: session.studentName,
+      checkpointId: "perkataan_kvkv",
+      interventionId: "",
+      activity: "latihan_pilih",
+      phase: "practice",
+      targetWord: word,
+      attemptNumber: latihanChoiceWrongAttempts + 1,
+      correct: isCorrect === true,
+      assisted: kvkvPilihHelpGiven === true,
+      errorType: "",
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  function flushKvkvPilihLearningEvents() {
+    const engine = getAssessmentEngine();
+    let batch;
+
+    if (kvkvPilihSyncing || !kvkvPilihEventQueue.length) {
+      return;
+    }
+
+    if (!engine || !engine.syncLearningEventsToGoogleSheet) {
+      console.warn("[KMJ] Learning event sync skipped: sync function missing");
+      return;
+    }
+
+    batch = kvkvPilihEventQueue.slice();
+    kvkvPilihSyncing = true;
+
+    engine
+      .syncLearningEventsToGoogleSheet(batch)
+      .then(function (result) {
+        const sent = {};
+        let i;
+
+        kvkvPilihSyncing = false;
+
+        if (!result || result.ok !== true) {
+          console.warn(
+            "[KMJ] Learning event sync failed",
+            result && result.reason ? result.reason : result
+          );
+          return;
+        }
+
+        for (i = 0; i < batch.length; i += 1) {
+          sent[batch[i].eventId] = true;
+        }
+
+        kvkvPilihEventQueue = kvkvPilihEventQueue.filter(function (event) {
+          return !sent[event.eventId];
+        });
+
+        if (kvkvPilihEventQueue.length) {
+          flushKvkvPilihLearningEvents();
+        }
+      })
+      .catch(function (error) {
+        kvkvPilihSyncing = false;
+        console.warn("[KMJ] Learning event sync failed", error);
+      });
+  }
+
   function selectLatihanChoiceAnswer(index) {
     if (isLatihanAdjustActive()) {
       return;
@@ -9479,6 +9617,8 @@
     const revealWord = String(targetWord || "")
       .trim()
       .toLowerCase();
+
+    recordKvkvPilihLearningEvent(targetWord, isCorrect);
 
     latihanChoiceAnswerEls.forEach(function (btn, btnIndex) {
       btn.classList.remove(
@@ -9540,6 +9680,7 @@
         pulseLatihanSeterusnyaHotspot();
       }, LATIHAN_FEEDBACK_HIDE_MS);
 
+      flushKvkvPilihLearningEvents();
       return;
     }
 
@@ -9553,6 +9694,7 @@
 
       showLatihanFeedbackMessage("Cuba lagi 😊");
       playLatihanChoiceAudio({ silentAutoplay: true });
+      markKvkvPilihHelpGiven();
 
       latihanChoiceResetTimer = window.setTimeout(function () {
         latihanChoiceResetTimer = null;
@@ -9611,6 +9753,7 @@
     showLatihanFeedbackMessage(buildLatihanChoiceHint(targetWord), {
       autoHide: false,
     });
+    markKvkvPilihHelpGiven();
 
     latihanChoiceResetTimer = window.setTimeout(function () {
       latihanChoiceResetTimer = null;
@@ -9619,6 +9762,7 @@
   }
 
   function openNextLatihanChoiceQuestion() {
+    flushKvkvPilihLearningEvents();
     hideLatihanPersistentHint();
     hideLatihanReinforcement();
     clearLatihanFeedbackHideTimer();
@@ -13721,6 +13865,7 @@
     }
 
     if (action === "latihan-replay-audio") {
+      markKvkvPilihHelpGiven();
       playLatihanChoiceAudio();
       return;
     }

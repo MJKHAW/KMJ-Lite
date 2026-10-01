@@ -32,6 +32,25 @@ var CABARAN_RESEARCH_SHEET_NAME = "Cabaran_Research";
 var LICENSES_SHEET_NAME = "Licenses";
 var STUDENT_ROSTER_SHEET_NAME = "Student_Roster";
 var STUDENT_SUMMARY_SHEET_NAME = "Student_Summary";
+var LEARNING_EVENTS_SHEET_NAME = "Learning_Events";
+
+var LEARNING_EVENTS_HEADERS = [
+  "eventId",
+  "schoolCode",
+  "classId",
+  "studentId",
+  "studentName",
+  "checkpointId",
+  "interventionId",
+  "activity",
+  "phase",
+  "targetWord",
+  "attemptNumber",
+  "correct",
+  "assisted",
+  "errorType",
+  "timestamp",
+];
 
 var LICENSE_HEADERS = [
   "SchoolCode",
@@ -151,6 +170,10 @@ function doPost(e) {
 
     if (body.action === "generateSchoolReport") {
       return generateSchoolReport_(body);
+    }
+
+    if (body.action === "syncLearningEvents") {
+      return syncLearningEvents_(body);
     }
 
     var records = body.records;
@@ -2091,6 +2114,141 @@ function upsertCabaranResearch_(records, syncedAt) {
   }
 
   return { inserted: inserted, updated: updated };
+}
+
+function learningEventText_(value) {
+  return String(value == null ? "" : value).trim();
+}
+
+function isValidLearningEvent_(event, schoolCode) {
+  var attemptNumber;
+
+  if (!event || typeof event !== "object") {
+    return false;
+  }
+
+  attemptNumber = Number(event.attemptNumber);
+
+  return (
+    !!learningEventText_(event.eventId) &&
+    learningEventText_(event.schoolCode).toUpperCase() === schoolCode &&
+    !!learningEventText_(event.classId) &&
+    !!learningEventText_(event.studentId) &&
+    !!learningEventText_(event.studentName) &&
+    !!learningEventText_(event.checkpointId) &&
+    !!learningEventText_(event.activity) &&
+    !!learningEventText_(event.phase) &&
+    !!learningEventText_(event.targetWord) &&
+    isFinite(attemptNumber) &&
+    attemptNumber >= 1 &&
+    typeof event.correct === "boolean" &&
+    typeof event.assisted === "boolean" &&
+    !!learningEventText_(event.timestamp)
+  );
+}
+
+function learningEventRowValues_(event) {
+  return [
+    learningEventText_(event.eventId),
+    learningEventText_(event.schoolCode).toUpperCase(),
+    learningEventText_(event.classId),
+    learningEventText_(event.studentId),
+    learningEventText_(event.studentName),
+    learningEventText_(event.checkpointId),
+    learningEventText_(event.interventionId),
+    learningEventText_(event.activity),
+    learningEventText_(event.phase),
+    learningEventText_(event.targetWord).toLowerCase(),
+    Number(event.attemptNumber),
+    event.correct === true,
+    event.assisted === true,
+    learningEventText_(event.errorType),
+    learningEventText_(event.timestamp),
+  ];
+}
+
+function loadLearningEventIds_(sheet) {
+  var ids = {};
+  var lastRow = sheet.getLastRow();
+  var values;
+  var i;
+  var eventId;
+
+  if (lastRow < 2) {
+    return ids;
+  }
+
+  values = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+
+  for (i = 0; i < values.length; i += 1) {
+    eventId = learningEventText_(values[i][0]);
+
+    if (eventId) {
+      ids[eventId] = true;
+    }
+  }
+
+  return ids;
+}
+
+function syncLearningEvents_(body) {
+  var schoolCode = learningEventText_(body && body.schoolCode).toUpperCase();
+  var events = body && body.events;
+  var sheet;
+  var existingIds;
+  var rows = [];
+  var seenInBatch = {};
+  var inserted = 0;
+  var duplicates = 0;
+  var rejected = 0;
+  var i;
+  var event;
+  var eventId;
+
+  if (!schoolCode) {
+    return jsonResponse_({ success: false, error: "schoolCode diperlukan." });
+  }
+
+  if (!events || !events.length || !events.concat) {
+    return jsonResponse_({ success: false, error: "events diperlukan." });
+  }
+
+  sheet = getOrCreateSheet_(LEARNING_EVENTS_SHEET_NAME);
+  ensureHeaders_(sheet, LEARNING_EVENTS_HEADERS);
+  existingIds = loadLearningEventIds_(sheet);
+
+  for (i = 0; i < events.length; i += 1) {
+    event = events[i];
+
+    if (!isValidLearningEvent_(event, schoolCode)) {
+      rejected += 1;
+      continue;
+    }
+
+    eventId = learningEventText_(event.eventId);
+
+    if (existingIds[eventId] || seenInBatch[eventId]) {
+      duplicates += 1;
+      continue;
+    }
+
+    seenInBatch[eventId] = true;
+    rows.push(learningEventRowValues_(event));
+  }
+
+  if (rows.length) {
+    sheet
+      .getRange(sheet.getLastRow() + 1, 1, rows.length, LEARNING_EVENTS_HEADERS.length)
+      .setValues(rows);
+    inserted = rows.length;
+  }
+
+  return jsonResponse_({
+    success: true,
+    inserted: inserted,
+    duplicates: duplicates,
+    rejected: rejected,
+  });
 }
 
 function getOrCreateSheet_(name) {
