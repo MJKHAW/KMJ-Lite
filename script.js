@@ -874,6 +874,8 @@
   let kvkvPilihHelpGiven = false;
   let kvkvPilihEventQueue = [];
   let kvkvPilihSyncing = false;
+  let kvkvPilihHelpNeededWords = Object.create(null);
+  let kvkvPilihInterventionNeeded = false;
   let latihanChoiceAnsweredCorrectly = false;
   let latihanChoiceHintVisible = false;
   let latihanChoiceWordImage = null;
@@ -8342,6 +8344,7 @@
       if (previousScreen !== "latihan") {
         latihanChoiceQuestionNum = 1;
         ensureLatihanChoiceQuestionPlan(true);
+        resetKvkvPilihInterventionDetector();
       }
 
       prepareLatihanChoiceScreen();
@@ -9087,6 +9090,7 @@
     latihanChoiceWrongAttempts = 0;
     latihanChoiceAnsweredCorrectly = false;
     ensureLatihanChoiceQuestionPlan(true);
+    resetKvkvPilihInterventionDetector();
     prepareLatihanChoiceScreen();
   }
 
@@ -9503,6 +9507,42 @@
     );
   }
 
+  function resetKvkvPilihInterventionDetector() {
+    if (selectedCheckpoint !== "perkataan_kvkv") {
+      return;
+    }
+
+    kvkvPilihHelpNeededWords = Object.create(null);
+    kvkvPilihInterventionNeeded = false;
+  }
+
+  function noteKvkvPilihFirstAttempt(targetWord, attemptNumber, isCorrect) {
+    const word = String(targetWord || "").trim().toLowerCase();
+    let helpNeededCount;
+
+    if (selectedCheckpoint !== "perkataan_kvkv" || activeScreen !== "latihan") {
+      return;
+    }
+
+    if (attemptNumber !== 1 || !word || isCorrect === true) {
+      return;
+    }
+
+    if (kvkvPilihHelpNeededWords[word]) {
+      return;
+    }
+
+    kvkvPilihHelpNeededWords[word] = true;
+    helpNeededCount = Object.keys(kvkvPilihHelpNeededWords).length;
+    console.log("[KMJ Intervention] Help-needed word: " + word);
+    console.log("[KMJ Intervention] Help-needed count: " + helpNeededCount + "/3");
+
+    if (!kvkvPilihInterventionNeeded && helpNeededCount >= 3) {
+      kvkvPilihInterventionNeeded = true;
+      console.log("[KMJ Intervention] Intervention needed");
+    }
+  }
+
   function markKvkvPilihHelpGiven() {
     if (selectedCheckpoint === "perkataan_kvkv") {
       kvkvPilihHelpGiven = true;
@@ -9619,6 +9659,7 @@
       .toLowerCase();
 
     recordKvkvPilihLearningEvent(targetWord, isCorrect);
+    noteKvkvPilihFirstAttempt(targetWord, latihanChoiceWrongAttempts + 1, isCorrect);
 
     latihanChoiceAnswerEls.forEach(function (btn, btnIndex) {
       btn.classList.remove(
