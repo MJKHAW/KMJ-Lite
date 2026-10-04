@@ -13699,11 +13699,28 @@
   const KMJ_TEACHING_FORMATIONS = {
     a: {
       id: "vokal-a",
+      checkpoint: "vokal",
       dotted: "assets/letter-formation/vokal/a-dotted.png",
       solid: "assets/letter-formation/vokal/a-solid.png",
       durationMs: 6000,
+      route: "bowl-then-right-stem",
+      strokes: [
+        { route: "bowl", durationMs: 4200, block: ["stem"] },
+        { pauseMs: 400 },
+        { route: "stem", durationMs: 1400 },
+      ],
     },
   };
+
+  function findTeachingFormation(checkpoint, item) {
+    const lesson = KMJ_TEACHING_FORMATIONS[item];
+
+    if (!lesson || lesson.checkpoint !== checkpoint) {
+      return null;
+    }
+
+    return lesson;
+  }
 
   function cancelTeachingFormationFrame() {
     if (belajarTeachingFrame) {
@@ -13721,8 +13738,18 @@
   }
 
   let teachingRevealMap = null;
+  let teachingRevealKey = "";
+  let teachingActiveLesson = null;
 
-  function buildTeachingRevealMap(solidImage, view) {
+  function buildTeachingRevealMap(lesson, solidImage, view) {
+    if (!lesson || lesson.route !== "bowl-then-right-stem") {
+      return null;
+    }
+
+    return buildBowlThenRightStemMap(solidImage, view);
+  }
+
+  function buildBowlThenRightStemMap(solidImage, view) {
     const width = solidImage.naturalWidth;
     const height = solidImage.naturalHeight;
 
@@ -14008,23 +14035,75 @@
       viewCtx: view.getContext("2d"),
       mask: mask,
       maskCtx: maskCtx,
-      stemGate: stemGate,
-      bowl: densify(bowlSamples),
-      stem: densify(stemRows),
-      bowlRadius: spans[Math.floor(spans.length / 2)] * 0.5 + 2,
-      stemRadius: stemWidths[Math.floor(stemWidths.length / 2)] * 0.5 + 2,
+      routes: {
+        bowl: densify(bowlSamples),
+        stem: densify(stemRows),
+      },
+      radii: {
+        bowl: spans[Math.floor(spans.length / 2)] * 0.5 + 2,
+        stem: stemWidths[Math.floor(stemWidths.length / 2)] * 0.5 + 2,
+      },
+      gates: {
+        stem: stemGate,
+      },
     };
   }
 
-  function paintTeachingMask(bowlT, stemT) {
+  function ensureTeachingRevealMap(lesson, solidImage, view) {
+    const key = lesson.id + "\n" + lesson.solid;
+
+    if (teachingRevealMap && teachingRevealKey === key) {
+      return teachingRevealMap;
+    }
+
+    teachingRevealMap = buildTeachingRevealMap(lesson, solidImage, view);
+    teachingRevealKey = teachingRevealMap ? key : "";
+    return teachingRevealMap;
+  }
+
+  function teachingRouteProgress(lesson, progress) {
+    const progressByRoute = {};
+    const elapsed = Math.max(0, progress) * lesson.durationMs;
+    const strokes = lesson.strokes || [];
+    let cursor = 0;
+    let index;
+    let step;
+    let span;
+
+    for (index = 0; index < strokes.length; index += 1) {
+      step = strokes[index];
+      span = step.pauseMs > 0 ? step.pauseMs : (step.durationMs > 0 ? step.durationMs : 0);
+      if (!step.route) {
+        cursor += span;
+        continue;
+      }
+      if (elapsed < cursor) {
+        progressByRoute[step.route] = -1;
+      } else if (span <= 0 || elapsed >= cursor + span) {
+        progressByRoute[step.route] = 1;
+      } else {
+        progressByRoute[step.route] = (elapsed - cursor) / span;
+      }
+      cursor += span;
+    }
+
+    return progressByRoute;
+  }
+
+  function paintTeachingMask(lesson, routeProgress) {
     const map = teachingRevealMap;
     const ctx = map.maskCtx;
+    const strokes = lesson.strokes || [];
+    let index;
+    let step;
+    let blocked;
+    let gate;
 
     function brush(points, t, radius) {
       let last;
       let n;
 
-      if (t < 0 || !points.length) {
+      if (!(t >= 0) || !points.length || !(radius > 0)) {
         return;
       }
 
@@ -14046,11 +14125,25 @@
 
     ctx.clearRect(0, 0, map.mask.width, map.mask.height);
     ctx.globalCompositeOperation = "source-over";
-    brush(map.bowl, bowlT, map.bowlRadius);
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.drawImage(map.stemGate, 0, 0);
-    ctx.globalCompositeOperation = "source-over";
-    brush(map.stem, stemT, map.stemRadius);
+
+    for (index = 0; index < strokes.length; index += 1) {
+      step = strokes[index];
+      if (step.route && map.routes[step.route]) {
+        brush(map.routes[step.route], routeProgress[step.route], map.radii[step.route]);
+      }
+      if (!step.block) {
+        continue;
+      }
+      for (blocked = 0; blocked < step.block.length; blocked += 1) {
+        gate = map.gates[step.block[blocked]];
+        if (!gate) {
+          continue;
+        }
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.drawImage(gate, 0, 0);
+        ctx.globalCompositeOperation = "source-over";
+      }
+    }
     map.viewCtx.clearRect(0, 0, map.view.width, map.view.height);
     map.viewCtx.globalCompositeOperation = "source-over";
     map.viewCtx.drawImage(map.solid, 0, 0);
@@ -14080,15 +14173,11 @@
     if (solid) solid.style.visibility = "hidden";
     if (view) view.style.visibility = "visible";
 
-    if (!view || !solid || !solid.naturalWidth) {
+    if (!view || !solid || !teachingActiveLesson || !solid.naturalWidth) {
       return;
     }
 
-    if (!teachingRevealMap) {
-      teachingRevealMap = buildTeachingRevealMap(solid, view);
-    }
-
-    if (!teachingRevealMap) {
+    if (!ensureTeachingRevealMap(teachingActiveLesson, solid, view)) {
       solid.style.visibility = "visible";
       view.style.visibility = "hidden";
       return;
@@ -14099,10 +14188,7 @@
       return;
     }
 
-    paintTeachingMask(
-      Math.min(1, clamped / (4.2 / 6)),
-      clamped < (4.6 / 6) ? -1 : (clamped - (4.6 / 6)) / (1.4 / 6)
-    );
+    paintTeachingMask(teachingActiveLesson, teachingRouteProgress(teachingActiveLesson, clamped));
   }
 
   function whenTeachingImagesReady() {
@@ -14154,6 +14240,8 @@
     if (!belajarTeachingCanvas || !lesson || !dotted || !solid) {
       return false;
     }
+
+    teachingActiveLesson = lesson;
 
     if (dotted.getAttribute("src") !== lesson.dotted) {
       dotted.src = lesson.dotted;
@@ -14328,12 +14416,14 @@
     applyBelajarTypography();
     updateBelajarWordImage(item);
 
-    if (selectedCheckpoint === "vokal" && item === "a") {
+    const formation = findTeachingFormation(selectedCheckpoint, item);
+
+    if (formation) {
       if (autoPlayBelajar) {
         playBelajarAudio();
-        startTeachingFormation(KMJ_TEACHING_FORMATIONS.a);
+        startTeachingFormation(formation);
       } else {
-        showCompletedTeachingFormation(KMJ_TEACHING_FORMATIONS.a);
+        showCompletedTeachingFormation(formation);
       }
       return;
     }
