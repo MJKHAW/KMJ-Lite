@@ -2078,6 +2078,43 @@ body.debug-hotspots .hotspot::after {
   text-overflow: ellipsis;
 }
 
+#kmj-teaching-formation {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  background: transparent;
+  pointer-events: none;
+  z-index: 4;
+  transform-origin: 49.4907% 40.2083%;
+  transform: translateX(1.8056%) scale(0.82);
+}
+
+#kmj-teaching-formation.is-active {
+  display: block;
+}
+
+#kmj-teaching-formation img,
+#kmj-teaching-formation canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+#kmj-teaching-formation .kmj-teaching-solid,
+#kmj-teaching-formation canvas {
+  visibility: hidden;
+}
+
+#belajar-word-display.is-teaching-hidden {
+  visibility: hidden;
+}
+
 #belajar-sebut-overlay {
   position: absolute;
   inset: 0;

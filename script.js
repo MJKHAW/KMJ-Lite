@@ -841,6 +841,9 @@
   let belajarLevelItemIndex = 0;
   let belajarLevelDisplay = null;
   let belajarWordDisplay = null;
+  let belajarTeachingCanvas = null;
+  let belajarTeachingToken = 0;
+  let belajarTeachingFrame = 0;
   let belajarWordImage = null;
   let belajarFeedback = null;
   let belajarStudentSyncBadge = null;
@@ -3649,6 +3652,33 @@
         writingZone.appendChild(belajarLevelDisplay);
         writingZone.appendChild(belajarWordDisplay);
         section.appendChild(writingZone);
+
+        belajarTeachingCanvas = document.createElement("div");
+        belajarTeachingCanvas.id = "kmj-teaching-formation";
+        belajarTeachingCanvas.setAttribute("aria-hidden", "true");
+
+        const belajarTeachingDotted = document.createElement("img");
+        belajarTeachingDotted.className = "kmj-teaching-dotted";
+        belajarTeachingDotted.alt = "";
+        belajarTeachingDotted.draggable = false;
+        belajarTeachingDotted.decoding = "async";
+        belajarTeachingDotted.src = KMJ_TEACHING_FORMATIONS.a.dotted;
+
+        const belajarTeachingSolid = document.createElement("img");
+        belajarTeachingSolid.className = "kmj-teaching-solid";
+        belajarTeachingSolid.alt = "";
+        belajarTeachingSolid.draggable = false;
+        belajarTeachingSolid.decoding = "async";
+        belajarTeachingSolid.src = KMJ_TEACHING_FORMATIONS.a.solid;
+
+        const belajarTeachingReveal = document.createElement("canvas");
+        belajarTeachingReveal.className = "kmj-teaching-reveal";
+        belajarTeachingReveal.setAttribute("aria-hidden", "true");
+
+        belajarTeachingCanvas.appendChild(belajarTeachingDotted);
+        belajarTeachingCanvas.appendChild(belajarTeachingSolid);
+        belajarTeachingCanvas.appendChild(belajarTeachingReveal);
+        section.appendChild(belajarTeachingCanvas);
 
         belajarWordImage = document.createElement("img");
         belajarWordImage.id = "belajar-word-image";
@@ -13666,6 +13696,594 @@
     setWordImageElement(latihanSusunWordImage, src, "");
   }
 
+  const KMJ_TEACHING_FORMATIONS = {
+    a: {
+      id: "vokal-a",
+      dotted: "assets/letter-formation/vokal/a-dotted.png",
+      solid: "assets/letter-formation/vokal/a-solid.png",
+      durationMs: 6000,
+    },
+  };
+
+  function cancelTeachingFormationFrame() {
+    if (belajarTeachingFrame) {
+      window.cancelAnimationFrame(belajarTeachingFrame);
+      belajarTeachingFrame = 0;
+    }
+  }
+
+  function teachingFormationImage(kind) {
+    if (!belajarTeachingCanvas) {
+      return null;
+    }
+
+    return belajarTeachingCanvas.querySelector(".kmj-teaching-" + kind);
+  }
+
+  let teachingRevealMap = null;
+
+  function buildTeachingRevealMap(solidImage, view) {
+    const width = solidImage.naturalWidth;
+    const height = solidImage.naturalHeight;
+
+    if (!width || !height || !view) {
+      return null;
+    }
+
+    const sample = document.createElement("canvas");
+    const sampleCtx = sample.getContext("2d", { willReadFrequently: true });
+    sample.width = width;
+    sample.height = height;
+    sampleCtx.drawImage(solidImage, 0, 0);
+
+    const pixels = sampleCtx.getImageData(0, 0, width, height).data;
+    const ink = new Uint8Array(width * height);
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+    let y;
+    let x;
+    let i;
+
+    for (y = 0; y < height; y += 1) {
+      for (x = 0; x < width; x += 1) {
+        i = y * width + x;
+        if (pixels[i * 4 + 3] < 16) {
+          continue;
+        }
+        ink[i] = 1;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+
+    if (maxX < minX) {
+      return null;
+    }
+
+    const x0 = Math.max(0, minX - 2);
+    const y0 = Math.max(0, minY - 2);
+    const x1 = Math.min(width - 1, maxX + 2);
+    const y1 = Math.min(height - 1, maxY + 2);
+    const exterior = new Uint8Array(width * height);
+    const queue = new Int32Array((x1 - x0 + 1) * (y1 - y0 + 1));
+    let head = 0;
+    let tail = 0;
+
+    function seed(px, py) {
+      let index;
+      if (px < x0 || py < y0 || px > x1 || py > y1) {
+        return;
+      }
+      index = py * width + px;
+      if (exterior[index] || ink[index]) {
+        return;
+      }
+      exterior[index] = 1;
+      queue[tail] = index;
+      tail += 1;
+    }
+
+    for (x = x0; x <= x1; x += 1) {
+      seed(x, y0);
+      seed(x, y1);
+    }
+    for (y = y0; y <= y1; y += 1) {
+      seed(x0, y);
+      seed(x1, y);
+    }
+
+    while (head < tail) {
+      i = queue[head];
+      head += 1;
+      x = i % width;
+      y = (i - x) / width;
+      seed(x - 1, y);
+      seed(x + 1, y);
+      seed(x, y - 1);
+      seed(x, y + 1);
+    }
+
+    let holeX = 0;
+    let holeY = 0;
+    let holeN = 0;
+    let holeRight = -1;
+
+    for (y = y0; y <= y1; y += 1) {
+      for (x = x0; x <= x1; x += 1) {
+        i = y * width + x;
+        if (ink[i] || exterior[i]) {
+          continue;
+        }
+        holeX += x;
+        holeY += y;
+        holeN += 1;
+        if (x > holeRight) holeRight = x;
+      }
+    }
+
+    if (holeN < 20) {
+      return null;
+    }
+
+    const centerX = holeX / holeN;
+    const centerY = holeY / holeN;
+    const turn = Math.PI * 2;
+    const bowlSamples = [];
+    const spans = [];
+    let angle;
+    let dist;
+    let seen;
+    let innerX;
+    let innerY;
+    let outerX;
+    let outerY;
+    let sx;
+    let sy;
+    let span;
+    let startAngle = -Math.PI / 3;
+    let startX = -1;
+    let delta;
+
+    for (angle = 0; angle < turn; angle += turn / 360) {
+      seen = false;
+      innerX = 0;
+      innerY = 0;
+      outerX = 0;
+      outerY = 0;
+      for (dist = 2; dist < 140; dist += 1) {
+        sx = Math.round(centerX + Math.cos(angle) * dist);
+        sy = Math.round(centerY + Math.sin(angle) * dist);
+        if (sx < 0 || sy < 0 || sx >= width || sy >= height) {
+          break;
+        }
+        if (ink[sy * width + sx]) {
+          if (!seen) {
+            innerX = sx;
+            innerY = sy;
+            seen = true;
+          }
+          outerX = sx;
+          outerY = sy;
+        } else if (seen) {
+          break;
+        }
+      }
+      if (!seen) {
+        continue;
+      }
+      sx = (innerX + outerX) / 2;
+      sy = (innerY + outerY) / 2;
+      if (sx > holeRight) {
+        continue;
+      }
+      span = Math.hypot(outerX - innerX, outerY - innerY) + 1;
+      spans.push(span);
+      bowlSamples.push({ x: sx, y: sy, angle: angle });
+      if (sy < centerY && sx > startX) {
+        startX = sx;
+        startAngle = angle;
+      }
+    }
+
+    if (bowlSamples.length < 12) {
+      return null;
+    }
+
+    for (i = 0; i < bowlSamples.length; i += 1) {
+      delta = startAngle - bowlSamples[i].angle;
+      delta %= turn;
+      if (delta < 0) {
+        delta += turn;
+      }
+      bowlSamples[i].delta = delta;
+    }
+
+    bowlSamples.sort(function (a, b) {
+      return a.delta - b.delta;
+    });
+
+    const stemRows = [];
+    const stemWidths = [];
+    let rowX;
+    let rowN;
+    let rowMin;
+
+    for (y = minY; y <= maxY; y += 1) {
+      rowX = 0;
+      rowN = 0;
+      rowMin = width;
+      for (x = holeRight + 1; x <= maxX; x += 1) {
+        if (!ink[y * width + x]) {
+          continue;
+        }
+        rowX += x;
+        rowN += 1;
+        if (x < rowMin) {
+          rowMin = x;
+        }
+      }
+      if (!rowN) {
+        continue;
+      }
+      stemRows.push({ x: rowX / rowN, y: y });
+      stemWidths.push(rowN);
+    }
+
+    if (stemRows.length < 8) {
+      return null;
+    }
+
+    function densify(points) {
+      const dense = [{ x: points[0].x, y: points[0].y }];
+      let n;
+      let prev = points[0];
+      let dx;
+      let dy;
+      let length;
+      let travelled;
+      let u;
+
+      for (n = 1; n < points.length; n += 1) {
+        dx = points[n].x - prev.x;
+        dy = points[n].y - prev.y;
+        length = Math.hypot(dx, dy);
+        travelled = 1.25;
+        while (travelled <= length) {
+          u = travelled / length;
+          dense.push({
+            x: prev.x + dx * u,
+            y: prev.y + dy * u,
+          });
+          travelled += 1.25;
+        }
+        dense.push({ x: points[n].x, y: points[n].y });
+        prev = points[n];
+      }
+
+      return dense;
+    }
+
+    spans.sort(function (a, b) { return a - b; });
+    stemWidths.sort(function (a, b) { return a - b; });
+
+    const mask = document.createElement("canvas");
+    mask.width = width;
+    mask.height = height;
+    const maskCtx = mask.getContext("2d");
+    const stemGate = document.createElement("canvas");
+    const stemGateCtx = stemGate.getContext("2d");
+    const stemGateData = stemGateCtx.createImageData(maxX - holeRight, maxY - minY + 1);
+    const stemGatePixels = stemGateData.data;
+    let gateX;
+    let gateY;
+    let gateIndex;
+
+    stemGate.width = width;
+    stemGate.height = height;
+    view.width = width;
+    view.height = height;
+
+    for (gateY = minY; gateY <= maxY; gateY += 1) {
+      for (gateX = holeRight + 1; gateX <= maxX; gateX += 1) {
+        if (!ink[gateY * width + gateX]) {
+          continue;
+        }
+        gateIndex = ((gateY - minY) * stemGateData.width + (gateX - holeRight - 1)) * 4;
+        stemGatePixels[gateIndex] = 255;
+        stemGatePixels[gateIndex + 1] = 255;
+        stemGatePixels[gateIndex + 2] = 255;
+        stemGatePixels[gateIndex + 3] = 255;
+      }
+    }
+
+    stemGateCtx.putImageData(stemGateData, holeRight + 1, minY);
+
+    return {
+      solid: solidImage,
+      view: view,
+      viewCtx: view.getContext("2d"),
+      mask: mask,
+      maskCtx: maskCtx,
+      stemGate: stemGate,
+      bowl: densify(bowlSamples),
+      stem: densify(stemRows),
+      bowlRadius: spans[Math.floor(spans.length / 2)] * 0.5 + 2,
+      stemRadius: stemWidths[Math.floor(stemWidths.length / 2)] * 0.5 + 2,
+    };
+  }
+
+  function paintTeachingMask(bowlT, stemT) {
+    const map = teachingRevealMap;
+    const ctx = map.maskCtx;
+
+    function brush(points, t, radius) {
+      let last;
+      let n;
+
+      if (t < 0 || !points.length) {
+        return;
+      }
+
+      last = Math.round(t * (points.length - 1));
+      ctx.beginPath();
+      ctx.lineWidth = radius * 2;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "#ffffff";
+      ctx.moveTo(points[0].x, points[0].y);
+      for (n = 1; n <= last; n += 1) {
+        ctx.lineTo(points[n].x, points[n].y);
+      }
+      if (last < 1) {
+        ctx.lineTo(points[0].x + 0.01, points[0].y);
+      }
+      ctx.stroke();
+    }
+
+    ctx.clearRect(0, 0, map.mask.width, map.mask.height);
+    ctx.globalCompositeOperation = "source-over";
+    brush(map.bowl, bowlT, map.bowlRadius);
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.drawImage(map.stemGate, 0, 0);
+    ctx.globalCompositeOperation = "source-over";
+    brush(map.stem, stemT, map.stemRadius);
+    map.viewCtx.clearRect(0, 0, map.view.width, map.view.height);
+    map.viewCtx.globalCompositeOperation = "source-over";
+    map.viewCtx.drawImage(map.solid, 0, 0);
+    map.viewCtx.globalCompositeOperation = "destination-in";
+    map.viewCtx.drawImage(map.mask, 0, 0);
+    map.viewCtx.globalCompositeOperation = "source-over";
+  }
+
+  function setTeachingReveal(progress) {
+    const solid = teachingFormationImage("solid");
+    const dotted = teachingFormationImage("dotted");
+    const view = teachingFormationImage("reveal");
+    const clamped = Math.max(0, Math.min(1, progress));
+
+    if (solid) {
+      solid.style.clipPath = "none";
+    }
+
+    if (clamped >= 1) {
+      if (dotted) dotted.style.visibility = "hidden";
+      if (solid) solid.style.visibility = "visible";
+      if (view) view.style.visibility = "hidden";
+      return;
+    }
+
+    if (dotted) dotted.style.visibility = "visible";
+    if (solid) solid.style.visibility = "hidden";
+    if (view) view.style.visibility = "visible";
+
+    if (!view || !solid || !solid.naturalWidth) {
+      return;
+    }
+
+    if (!teachingRevealMap) {
+      teachingRevealMap = buildTeachingRevealMap(solid, view);
+    }
+
+    if (!teachingRevealMap) {
+      solid.style.visibility = "visible";
+      view.style.visibility = "hidden";
+      return;
+    }
+
+    if (clamped <= 0) {
+      teachingRevealMap.viewCtx.clearRect(0, 0, teachingRevealMap.view.width, teachingRevealMap.view.height);
+      return;
+    }
+
+    paintTeachingMask(
+      Math.min(1, clamped / (4.2 / 6)),
+      clamped < (4.6 / 6) ? -1 : (clamped - (4.6 / 6)) / (1.4 / 6)
+    );
+  }
+
+  function whenTeachingImagesReady() {
+    const images = [
+      teachingFormationImage("dotted"),
+      teachingFormationImage("solid"),
+    ];
+
+    return Promise.all(images.map(function (img) {
+      if (!img) {
+        return Promise.resolve(false);
+      }
+
+      if (img.complete && img.naturalWidth > 0) {
+        return Promise.resolve(true);
+      }
+
+      return new Promise(function (resolve) {
+        img.addEventListener("load", function () {
+          resolve(img.naturalWidth > 0);
+        }, { once: true });
+        img.addEventListener("error", function () {
+          resolve(false);
+        }, { once: true });
+      });
+    })).then(function (ready) {
+      return ready.every(Boolean);
+    });
+  }
+
+  function hideTeachingFormation() {
+    belajarTeachingToken += 1;
+    cancelTeachingFormationFrame();
+
+    if (belajarTeachingCanvas) {
+      belajarTeachingCanvas.classList.remove("is-active");
+      setTeachingReveal(0);
+    }
+
+    if (belajarWordDisplay) {
+      belajarWordDisplay.classList.remove("is-teaching-hidden");
+    }
+  }
+
+  function showTeachingPair(lesson) {
+    const dotted = teachingFormationImage("dotted");
+    const solid = teachingFormationImage("solid");
+
+    if (!belajarTeachingCanvas || !lesson || !dotted || !solid) {
+      return false;
+    }
+
+    if (dotted.getAttribute("src") !== lesson.dotted) {
+      dotted.src = lesson.dotted;
+    }
+
+    if (solid.getAttribute("src") !== lesson.solid) {
+      solid.src = lesson.solid;
+    }
+
+    belajarTeachingCanvas.classList.add("is-active");
+
+    if (belajarWordDisplay) {
+      belajarWordDisplay.classList.add("is-teaching-hidden");
+    }
+
+    return true;
+  }
+
+  function showCompletedTeachingFormation(lesson) {
+    const token = (belajarTeachingToken += 1);
+
+    cancelTeachingFormationFrame();
+
+    if (!showTeachingPair(lesson)) {
+      if (belajarWordDisplay) {
+        belajarWordDisplay.classList.remove("is-teaching-hidden");
+      }
+      return;
+    }
+
+    if (teachingImagesReadyNow()) {
+      setTeachingReveal(1);
+      return;
+    }
+
+    whenTeachingImagesReady().then(function (ready) {
+      if (token !== belajarTeachingToken) {
+        return;
+      }
+
+      if (!ready) {
+        hideTeachingFormation();
+        return;
+      }
+
+      setTeachingReveal(1);
+    });
+  }
+
+  function runTeachingFormation(lesson, durationMs, token) {
+    const duration = durationMs > 200 ? durationMs : 6000;
+    const started = window.performance.now();
+
+    if (!showTeachingPair(lesson) || token !== belajarTeachingToken) {
+      if (belajarWordDisplay && token === belajarTeachingToken) {
+        belajarWordDisplay.classList.remove("is-teaching-hidden");
+      }
+      return;
+    }
+
+    function frame(now) {
+      const elapsed = now - started;
+      const progress = Math.max(0, Math.min(1, elapsed / duration));
+
+      if (token !== belajarTeachingToken) {
+        return;
+      }
+
+      if (elapsed >= duration) {
+        belajarTeachingFrame = 0;
+        setTeachingReveal(1);
+        return;
+      }
+
+      setTeachingReveal(progress);
+      belajarTeachingFrame = window.requestAnimationFrame(frame);
+    }
+
+    setTeachingReveal(0);
+    belajarTeachingFrame = window.requestAnimationFrame(frame);
+  }
+
+  function startTeachingFormation(lesson) {
+    const token = (belajarTeachingToken += 1);
+    const durationMs = lesson && lesson.durationMs > 200 ? lesson.durationMs : 6000;
+
+    cancelTeachingFormationFrame();
+
+    if (!showTeachingPair(lesson)) {
+      if (belajarWordDisplay) {
+        belajarWordDisplay.classList.remove("is-teaching-hidden");
+      }
+      return;
+    }
+
+    setTeachingReveal(0);
+
+    if (teachingImagesReadyNow()) {
+      runTeachingFormation(lesson, durationMs, token);
+      return;
+    }
+
+    whenTeachingImagesReady().then(function (ready) {
+      if (token !== belajarTeachingToken) {
+        return;
+      }
+
+      if (!ready) {
+        hideTeachingFormation();
+        return;
+      }
+
+      runTeachingFormation(lesson, durationMs, token);
+    });
+  }
+
+  function teachingImagesReadyNow() {
+    const dotted = teachingFormationImage("dotted");
+    const solid = teachingFormationImage("solid");
+
+    return !!(
+      dotted &&
+      solid &&
+      dotted.complete &&
+      solid.complete &&
+      dotted.naturalWidth > 0 &&
+      solid.naturalWidth > 0
+    );
+  }
+
   function updateBelajarWordDisplay(options) {
     if (!belajarWordDisplay) {
       return;
@@ -13678,6 +14296,7 @@
     stopPronunciationCapture();
 
     if (selectedCheckpoint === "suku_kata_kv") {
+      hideTeachingFormation();
       const level = SUKU_KATA_KV_LEVELS[belajarLevelIndex];
       const item = level.items[belajarLevelItemIndex];
 
@@ -13708,6 +14327,18 @@
     belajarWordDisplay.textContent = item;
     applyBelajarTypography();
     updateBelajarWordImage(item);
+
+    if (selectedCheckpoint === "vokal" && item === "a") {
+      if (autoPlayBelajar) {
+        playBelajarAudio();
+        startTeachingFormation(KMJ_TEACHING_FORMATIONS.a);
+      } else {
+        showCompletedTeachingFormation(KMJ_TEACHING_FORMATIONS.a);
+      }
+      return;
+    }
+
+    hideTeachingFormation();
 
     if (autoPlayBelajar) {
       playBelajarAudio();
