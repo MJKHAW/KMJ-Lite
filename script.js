@@ -13710,6 +13710,50 @@
         { route: "stem", durationMs: 1400 },
       ],
     },
+    e: {
+      id: "vokal-e",
+      checkpoint: "vokal",
+      dotted: "assets/letter-formation/vokal/e-dotted.png",
+      solid: "assets/letter-formation/vokal/e-solid.png",
+      durationMs: 5000,
+      route: "continuous-path",
+      guides: {
+        path: [
+          { x: 491, y: 787 },
+          { x: 507, y: 782 },
+          { x: 521, y: 774 },
+          { x: 535, y: 766 },
+          { x: 549, y: 758 },
+          { x: 563, y: 750 },
+          { x: 577, y: 742 },
+          { x: 583, y: 728 },
+          { x: 577, y: 714 },
+          { x: 564, y: 706 },
+          { x: 550, y: 702 },
+          { x: 536, y: 700 },
+          { x: 520, y: 703 },
+          { x: 507, y: 709 },
+          { x: 496, y: 718 },
+          { x: 487, y: 729 },
+          { x: 481, y: 742 },
+          { x: 477, y: 756 },
+          { x: 476, y: 770 },
+          { x: 477, y: 784 },
+          { x: 486, y: 801 },
+          { x: 489, y: 815 },
+          { x: 499, y: 826 },
+          { x: 512, y: 834 },
+          { x: 526, y: 838 },
+          { x: 551, y: 839 },
+          { x: 567, y: 836 },
+          { x: 580, y: 830 },
+          { x: 591, y: 821 },
+        ],
+      },
+      strokes: [
+        { route: "path", durationMs: 5000 },
+      ],
+    },
   };
 
   function findTeachingFormation(checkpoint, item) {
@@ -13742,6 +13786,10 @@
   let teachingActiveLesson = null;
 
   function buildTeachingRevealMap(lesson, solidImage, view) {
+    if (lesson && lesson.route === "continuous-path") {
+      return buildContinuousPathMap(lesson, solidImage, view);
+    }
+
     if (!lesson || lesson.route !== "bowl-then-right-stem") {
       return null;
     }
@@ -14049,6 +14097,154 @@
     };
   }
 
+  function buildContinuousPathMap(lesson, solidImage, view) {
+    const width = solidImage.naturalWidth;
+    const height = solidImage.naturalHeight;
+    const guides = lesson && lesson.guides;
+    const routes = {};
+    const radii = {};
+    let name;
+    let points;
+    let mask;
+
+    if (!width || !height || !view || !guides) {
+      return null;
+    }
+
+    function densify(source) {
+      const dense = [{ x: source[0].x, y: source[0].y, r: source[0].r }];
+      let n;
+      let prev = source[0];
+      let dx;
+      let dy;
+      let length;
+      let travelled;
+      let u;
+
+      for (n = 1; n < source.length; n += 1) {
+        dx = source[n].x - prev.x;
+        dy = source[n].y - prev.y;
+        length = Math.hypot(dx, dy);
+        travelled = 1.25;
+        while (travelled <= length) {
+          u = travelled / length;
+          dense.push({
+            x: prev.x + dx * u,
+            y: prev.y + dy * u,
+            r: prev.r + (source[n].r - prev.r) * u,
+          });
+          travelled += 1.25;
+        }
+        dense.push({ x: source[n].x, y: source[n].y, r: source[n].r });
+        prev = source[n];
+      }
+
+      return dense;
+    }
+
+    function coverRadii(path) {
+      const sample = document.createElement("canvas");
+      const sampleCtx = sample.getContext("2d", { willReadFrequently: true });
+      let pixels;
+      let n;
+      let point;
+      let prev;
+      let next;
+      let tx;
+      let ty;
+      let span;
+      let side;
+      let step;
+      let px;
+      let py;
+      let edge;
+      let other;
+      let reach;
+      let clearance;
+      let radius;
+
+      function inkAt(x, y) {
+        if (x < 0 || y < 0 || x >= width || y >= height) {
+          return false;
+        }
+        return pixels[(y * width + x) * 4 + 3] >= 16;
+      }
+
+      sample.width = width;
+      sample.height = height;
+      sampleCtx.drawImage(solidImage, 0, 0);
+      pixels = sampleCtx.getImageData(0, 0, width, height).data;
+
+      for (n = 0; n < path.length; n += 1) {
+        point = path[n];
+        prev = path[n > 0 ? n - 1 : n];
+        next = path[n < path.length - 1 ? n + 1 : n];
+        tx = next.x - prev.x;
+        ty = next.y - prev.y;
+        span = Math.hypot(tx, ty) || 1;
+        tx /= span;
+        ty /= span;
+        reach = 0;
+        clearance = 99;
+        for (side = 0; side < 2; side += 1) {
+          edge = 0;
+          other = 99;
+          let inInk = true;
+          for (step = 1; step <= 72; step += 1) {
+            px = Math.round(point.x + (side ? ty : -ty) * step);
+            py = Math.round(point.y + (side ? -tx : tx) * step);
+            if (inInk && inkAt(px, py)) {
+              edge = step;
+            } else if (inInk) {
+              inInk = false;
+            } else if (inkAt(px, py)) {
+              other = step;
+              break;
+            }
+          }
+          if (edge > reach) {
+            reach = edge;
+          }
+          if (other < clearance) {
+            clearance = other;
+          }
+        }
+        radius = Math.min(reach + 16, clearance - 4, 56);
+        point.r = radius > 8 ? radius : 8;
+      }
+    }
+
+    for (name in guides) {
+      if (!Object.prototype.hasOwnProperty.call(guides, name)) {
+        continue;
+      }
+      points = guides[name];
+      if (!points || points.length < 2) {
+        return null;
+      }
+      coverRadii(points);
+      routes[name] = densify(points);
+      radii[name] = points[0].r;
+    }
+
+    mask = document.createElement("canvas");
+    mask.width = width;
+    mask.height = height;
+    view.width = width;
+    view.height = height;
+
+    return {
+      solid: solidImage,
+      view: view,
+      viewCtx: view.getContext("2d"),
+      mask: mask,
+      maskCtx: mask.getContext("2d"),
+      routes: routes,
+      radii: radii,
+      gates: {},
+    };
+  }
+
   function ensureTeachingRevealMap(lesson, solidImage, view) {
     const key = lesson.id + "\n" + lesson.solid;
 
@@ -14108,6 +14304,16 @@
       }
 
       last = Math.round(t * (points.length - 1));
+
+      if (points[0].r > 0) {
+        ctx.fillStyle = "#ffffff";
+        for (n = 0; n <= last; n += 1) {
+          ctx.beginPath();
+          ctx.arc(points[n].x, points[n].y, points[n].r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        return;
+      }
       ctx.beginPath();
       ctx.lineWidth = radius * 2;
       ctx.lineCap = "round";
